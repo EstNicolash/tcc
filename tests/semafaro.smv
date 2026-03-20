@@ -1,0 +1,17 @@
+MODULE main
+VAR
+	estado : {verde, amarelo, vermelho};
+
+ASSIGN
+	init(estado) := verde;
+
+	next(estado) :=
+		case
+			estado = verde : amarelo;
+			estado = amarelo : vermelho;
+			estado = vermelho : verde;
+		esac;
+
+
+LTLSPEC G (estado = verde -> F (estado = vermelho))
+CTLSPEC EF (estado = vermelho)
