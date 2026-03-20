@@ -1,0 +1,61 @@
+VAR:
+	locked: boolean;
+	alive: boolean;
+	trapped: boolean;
+	inventory: {empty, key, disarmer, treasure};
+	hp: 0..3;
+	gamestate: {running, solved, lost};
+	
+ASSIGN
+	init(gamestate) := running;
+	init(hp) := 3;
+	init(locked) := TRUE;
+	init(trapped) := TRUE;
+	init(inventory) := empty;
+	init(alive) := TRUE;
+
+	next(gamestate) :=
+		case
+			hp = 0 : lost;
+			inventory = treasure : solved;
+			TRUE : gamestate;
+		esac;
+
+	next(hp) :=
+		case
+			hp > 0 & !alive : hp - 1 
+			TRUE : hp
+		esac;
+
+	next(alive) :=
+		case
+			trapped & !locked : FALSE;
+			TRUE : TRUE;
+		esac;
+
+	next(locked) :=
+		case
+			inventory = key & locked : FALSE;
+			inventory = key & !locked : TRUE;
+			TRUE: locked;
+		esac;
+
+	next(trapped) :=
+		case
+			inventory = disarmer & trapped : FALSE;
+			TRUE: trapped;
+		esac;
+
+	next(inventory) :=
+		case
+			!locked & alive : {empty, key, disarmer, treasure};
+			!alive : empty;
+			TRUE : {empty,key,disarmer};
+		esac;
+		
+		 
+			
+
+	
+
+	
