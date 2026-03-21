@@ -3,6 +3,7 @@ VAR:
 	alive: boolean;
 	trapped: boolean;
 	inventory: {empty, key, disarmer, treasure};
+	action: {idle, pick_up, use_item};
 	hp: 0..3;
 	gamestate: {running, solved, lost};
 	
@@ -29,28 +30,34 @@ ASSIGN
 
 	next(alive) :=
 		case
-			trapped & !locked : FALSE;
+			trapped & !locked: FALSE;
 			TRUE : TRUE;
 		esac;
 
 	next(locked) :=
 		case
-			inventory = key & locked : FALSE;
-			inventory = key & !locked : TRUE;
+			inventory = key & locked & action = use_item : FALSE;
+			inventory = key & !locked & action = use_item : TRUE;
 			TRUE: locked;
 		esac;
 
 	next(trapped) :=
 		case
-			inventory = disarmer & trapped : FALSE;
+			inventory = disarmer & trapped & action = use_item : FALSE;
 			TRUE: trapped;
 		esac;
 
 	next(inventory) :=
 		case
-			!locked & alive : {empty, key, disarmer, treasure};
+			!locked & alive & action = pick_up: {empty, key, disarmer, treasure};
 			!alive : empty;
 			TRUE : {empty,key,disarmer};
+		esac;
+
+	next(action) :=
+		case
+			!alive : idle;
+			TRUE : {idle, pick_up, use_item};
 		esac;
 		
 		 
