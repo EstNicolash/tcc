@@ -1,4 +1,5 @@
-VAR:
+MODULE main
+VAR
 	locked: boolean;
 	alive: boolean;
 	trapped: boolean;
@@ -24,8 +25,8 @@ ASSIGN
 
 	next(hp) :=
 		case
-			hp > 0 & !alive : hp - 1 
-			TRUE : hp
+			hp > 0 & !alive : hp - 1;
+			TRUE : hp;
 		esac;
 
 	next(alive) :=
@@ -36,14 +37,15 @@ ASSIGN
 
 	next(locked) :=
 		case
-			inventory = key & locked & action = use_item : FALSE;
-			inventory = key & !locked & action = use_item : TRUE;
+			alive & inventory = key & locked & action = use_item : FALSE;
+			alive & inventory = key & !locked & action = use_item : TRUE;
+			!alive : TRUE;
 			TRUE: locked;
 		esac;
 
 	next(trapped) :=
 		case
-			inventory = disarmer & trapped & action = use_item : FALSE;
+			alive & inventory = disarmer & trapped & action = use_item : FALSE;
 			TRUE: trapped;
 		esac;
 
@@ -59,10 +61,37 @@ ASSIGN
 			!alive : idle;
 			TRUE : {idle, pick_up, use_item};
 		esac;
+
+-- FAIRNESS action != idle;
+-- FAIRNESS gamestate != running;
 		
 		 
 			
+-- 1) Se o jogador abrir o baú enquanto a armadilha estiver ativa ele tem que morrer.
+LTLSPEC G (!locked & trapped -> X(!alive))
+CTLSPEC AG (!locked & trapped -> AX(!alive))
 
-	
+-- 2) Se o jogador abrir o bau e morrer, o baú se tranca novamente para a próxima tentativa
+LTLSPEC G (!alive -> X(locked))
+CTLSPEC AG (!alive -> AX(locked))
+
+-- 3) É impossível o jogador possuir o treasure se o baú ainda estiver trancado.
+LTLSPEC G!(inventory = treasure & locked)
+CTLSPEC !EF(inventory = treasure & locked)
+
+-- 4) O HP nunca pode aumentar.
+LTLSPEC G((hp = 3 -> G!(hp>3)) & (hp = 2 -> G!(hp>2)) & (hp = 1 -> G!(hp>1)) & (hp = 0 -> G(hp=0))) 
+CTLSPEC AG((hp = 3 -> AG!(hp>3)) & (hp = 2 -> AG!(hp>2)) & (hp = 1 -> AG!(hp>1)) & (hp = 0 -> AG(hp=0)))
+
+-- 5) Uma vez que o jogador perde, ele nunca mais pode voltar a jogar. O Game Over é definitivo.
+LTLSPEC G (gamestate=lost -> G(gamestate=lost))
+CTLSPEC AG (gamestate=lost -> AG(gamestate=lost))
+
+
+
+-- 6) O jogo não é impossível. Existe pelo menos um caminho onde o jogador consegue o tesouro.
+-- LTLSPEC !F(gamestate=solved) refutação.
+CTLSPEC EF (gamestate = solved)
+
 
 	
