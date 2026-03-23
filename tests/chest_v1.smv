@@ -110,3 +110,5 @@ CTLSPEC AG (!alive -> AX inventory=empty)
 LTLSPEC G (!trapped -> G !trapped)
 CTLSPEC AG (!trapped -> AG !trapped)
 
+-- 11) O jogador vive enquanto não abrir um bau com armadilha
+LTLSPEC (alive U (!locked & trapped)) | (G alive)
