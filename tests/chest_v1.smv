@@ -31,6 +31,7 @@ ASSIGN
 
 	next(alive) :=
 		case
+			!alive : TRUE;
 			trapped & !locked: FALSE;
 			TRUE : TRUE;
 		esac;
@@ -68,8 +69,8 @@ ASSIGN
 		 
 			
 -- 1) Se o jogador abrir o baú enquanto a armadilha estiver ativa ele tem que morrer.
-LTLSPEC G (!locked & trapped -> X(!alive))
-CTLSPEC AG (!locked & trapped -> AX(!alive))
+LTLSPEC G (alive & !locked & trapped -> X(!alive))
+CTLSPEC AG (alive & !locked & trapped -> AX(!alive))
 
 -- 2) Se o jogador abrir o bau e morrer, o baú se tranca novamente para a próxima tentativa
 LTLSPEC G (!alive -> X(locked))
@@ -94,4 +95,18 @@ CTLSPEC AG (gamestate=lost -> AG(gamestate=lost))
 CTLSPEC EF (gamestate = solved)
 
 
-	
+-- 7) Mesmo que o jogador seja descuidado e fique com apenas 1 hp, ainda deve ser possível ele vencer o jogo.
+CTLSPEC EF (hp=1 & EF gamestate = solved)
+-- LTLSPEC !F( hp = 1 -> F gamestate = solved) refutação
+
+-- 8) Sempre que o jogador morre, ele deve eventualmente voltar a estar vivo, desde que ainda tenha HP sobressalente
+CTLSPEC AG (!alive & hp > 0 -> AX alive)
+
+-- 9) O jogador não pode levar itens após morrer.
+LTLSPEC G (!alive -> X inventory=empty)
+CTLSPEC AG (!alive -> AX inventory=empty)
+
+-- 10) O baú deve permanecer seguro para sempre após desarmar a armadilha.
+LTLSPEC G (!trapped -> G !trapped)
+CTLSPEC AG (!trapped -> AG !trapped)
+
