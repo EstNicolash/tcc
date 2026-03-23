@@ -101,6 +101,7 @@ CTLSPEC EF (hp=1 & EF gamestate = solved)
 
 -- 8) Sempre que o jogador morre, ele deve eventualmente voltar a estar vivo, desde que ainda tenha HP sobressalente
 CTLSPEC AG (!alive & hp > 0 -> AX alive)
+CTLSPEC AG (!alive  -> AX alive)
 
 -- 9) O jogador não pode levar itens após morrer.
 LTLSPEC G (!alive -> X inventory=empty)
@@ -112,3 +113,6 @@ CTLSPEC AG (!trapped -> AG !trapped)
 
 -- 11) O jogador vive enquanto não abrir um bau com armadilha
 LTLSPEC (alive U (!locked & trapped)) | (G alive)
+
+-- 12)
+CTLSPEC EF (gamestate = solved & hp = 0)
