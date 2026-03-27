@@ -1,0 +1,13 @@
+[package]
+name = "checker"
+version = "0.1.0"
+edition = "2024"
+authors = ["Nicolas A. N. S"]
+
+[dependencies]
+petgraph = "0.6"
+thiserror = "1.0"
+logos = "0.14" 
+
+[dev-dependencies]
+assert_matches = "1.5"
