@@ -1,14 +1,9 @@
-use petgraph::graph::DiGraph;
+mod formula;
+mod kripke_structure;
+mod labelling;
+use formula::CtlFormula;
 
-#[derive(Debug, Clone, PartialEq)]
-enum Formula {
-    Prop(String),
-    Not(Box<Formula>),
-    And(Box<Formula>, Box<Formula>),
-    EX(Box<Formula>),
-    AF(Box<Formula>),
-    EU(Box<Formula>, Box<Formula>),
-}
+use petgraph::graph::DiGraph;
 
 fn main() {
     let mut kripke = DiGraph::<&str, ()>::new();
