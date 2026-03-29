@@ -46,6 +46,24 @@ impl LabelingProvider {
             set.remove(&state);
         }
     }
+    pub fn get_labels(&self, state: NodeIndex) -> Vec<CtlFormula> {
+        self.marks
+            .iter()
+            .filter(|(_, states)| states.contains(&state)) // Se o estado está no set daquela fórmula
+            .map(|(formula, _)| formula.clone())
+            .collect()
+    }
+
+    pub fn debug_print(&self, structure: &KripkeStructure) {
+        println!("\n--- DEBUG: STATE LABELS ---");
+        for state in structure.graph.node_indices() {
+            let name = &structure.graph[state];
+            // Usando o método correto aqui
+            let labels = self.get_labels(state);
+            println!("State {:?} ({}): {:?}", state, name, labels);
+        }
+        println!("---------------------------\n");
+    }
 }
 
 pub fn convert_equivalence(formula: &CtlFormula) -> CtlFormula {
@@ -124,13 +142,21 @@ fn label_formula(
     provider: &mut LabelingProvider,
 ) {
     match formula {
-        CtlFormula::True => {}
-        CtlFormula::False => {}
+        CtlFormula::True => {
+            // Fix: True must be labeled in ALL states for EU(True, f) to work
+            for state in structure.get_all_states() {
+                provider.add_label(state, CtlFormula::True);
+            }
+        }
+        CtlFormula::False => {
+            // False is never labeled in any state
+        }
         CtlFormula::Prop(p) => {
-            let current_formula = CtlFormula::Prop(p.clone());
-            for (state, labels) in &structure.initial_labels {
-                if labels.contains(p) {
-                    provider.add_label(*state, current_formula.clone());
+            for state in structure.get_all_states() {
+                if let Some(labels) = structure.initial_labels.get(&state) {
+                    if labels.contains(p) {
+                        provider.add_label(state, formula.clone());
+                    }
                 }
             }
         }
@@ -230,7 +256,7 @@ fn label_formula(
                 .map(|s| (s, structure.graph.neighbors(s).count()))
                 .collect();
 
-            for state in structure.graph.node_indices() {
+            for state in structure.get_all_states() {
                 if provider.is_labeled(state, f) {
                     provider.add_label(state, formula.clone());
                     todo.push(state);
@@ -261,12 +287,14 @@ fn label_formula(
         _ => panic!("Error: Operator {:?} should be converted!", formula),
     }
 }
-fn verify(formula: CtlFormula, structure: &KripkeStructure) -> bool {
+fn verify(structure: &KripkeStructure, formula: &CtlFormula) -> bool {
     let mut provider = LabelingProvider::new();
 
     let canonical_formula = convert_equivalence(&formula);
 
     label_formula(&canonical_formula, structure, &mut provider);
+
+    provider.debug_print(&structure);
 
     structure
         .initial_states
@@ -359,4 +387,50 @@ mod tests {
             panic!("Formula is no longer an Implication!");
         }
     }
+}
+#[test]
+fn test_traffic_light_from_nusmv_spec() {
+    let mut model = KripkeStructure::new();
+
+    // State 0: has labels "init" and "is_green"
+    let s0 = model.add_state("s0", vec!["init", "is_green"], true);
+    // State 1: has label "is_yellow"
+    let s1 = model.add_state("s1", vec!["is_yellow"], false);
+    // State 2: has label "is_red"
+    let s2 = model.add_state("s2", vec!["is_red"], false);
+
+    // 2. Add transitions from out.tra (0 -> 1, 1 -> 2, 2 -> 0)
+    model.add_transition(s0, s1);
+    model.add_transition(s1, s2);
+    model.add_transition(s2, s0);
+
+    // --- Specifications ---
+
+    // Spec 1: EF (state = red) -> "Is it possible to reach a red light?"
+    let spec1 = CtlFormula::EF(Box::new(CtlFormula::Prop("is_red".to_string())));
+
+    // Spec 2: AG (state = green -> AF (state = red))
+    // "In all paths, if it's green, it will eventually turn red."
+    let spec2 = CtlFormula::AG(Box::new(CtlFormula::Imply(
+        Box::new(CtlFormula::Prop("is_green".to_string())),
+        Box::new(CtlFormula::AF(Box::new(CtlFormula::Prop(
+            "is_red".to_string(),
+        )))),
+    )));
+
+    // --- Verification ---
+
+    // Debug print to verify state labels
+
+    // Test Spec 1: Should be true since 0 -> 1 -> 2
+    assert!(
+        verify(&model, &spec1),
+        "Assertion failed: EF(is_red) should be TRUE"
+    );
+
+    // Test Spec 2: Should be true because the cycle guarantees red follows green.
+    assert!(
+        verify(&model, &spec2),
+        "Assertion failed: AG(is_green -> AF(is_red)) should be TRUE"
+    );
 }
