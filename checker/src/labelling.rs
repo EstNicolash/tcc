@@ -136,7 +136,7 @@ fn label_formula(
         }
         CtlFormula::Not(f) => {
             label_formula(f, structure, provider);
-            for state in structure.graph.node_indices() {
+            for state in structure.get_all_states() {
                 if !provider.is_labeled(state, f) {
                     provider.add_label(state, formula.clone());
                 }
@@ -145,7 +145,7 @@ fn label_formula(
         CtlFormula::And(f1, f2) => {
             label_formula(f1, structure, provider);
             label_formula(f2, structure, provider);
-            for state in structure.graph.node_indices() {
+            for state in structure.get_all_states() {
                 if provider.is_labeled(state, f1) && provider.is_labeled(state, f2) {
                     provider.add_label(state, formula.clone());
                 }
@@ -154,7 +154,7 @@ fn label_formula(
         CtlFormula::Or(f1, f2) => {
             label_formula(f1, structure, provider);
             label_formula(f2, structure, provider);
-            for state in structure.graph.node_indices() {
+            for state in structure.get_all_states() {
                 if provider.is_labeled(state, f1) || provider.is_labeled(state, f2) {
                     provider.add_label(state, formula.clone());
                 }
@@ -163,7 +163,7 @@ fn label_formula(
         CtlFormula::Imply(f1, f2) => {
             label_formula(f1, structure, provider);
             label_formula(f2, structure, provider);
-            for state in structure.graph.node_indices() {
+            for state in structure.get_all_states() {
                 if !provider.is_labeled(state, f1) || provider.is_labeled(state, f2) {
                     provider.add_label(state, formula.clone());
                 }
@@ -171,7 +171,7 @@ fn label_formula(
         }
         CtlFormula::EX(f) => {
             label_formula(f, structure, provider);
-            for state in structure.graph.node_indices() {
+            for state in structure.get_all_states() {
                 let has_neighbor_satisfying = structure
                     .graph
                     .neighbors(state)
@@ -184,7 +184,7 @@ fn label_formula(
         }
         CtlFormula::AX(f) => {
             label_formula(f, structure, provider);
-            for state in structure.graph.node_indices() {
+            for state in structure.get_all_states() {
                 let all_neighbor_satisfy = structure
                     .graph
                     .neighbors(state)
@@ -200,7 +200,7 @@ fn label_formula(
             label_formula(f2, structure, provider);
 
             let mut todo: Vec<NodeIndex> = Vec::new();
-            for state in structure.graph.node_indices() {
+            for state in structure.get_all_states() {
                 if provider.is_labeled(state, f2) {
                     todo.push(state);
                     provider.add_label(state, formula.clone());
@@ -226,8 +226,7 @@ fn label_formula(
             let mut todo: Vec<NodeIndex> = Vec::new();
 
             let mut out_degree: std::collections::HashMap<NodeIndex, usize> = structure
-                .graph
-                .node_indices()
+                .get_all_states()
                 .map(|s| (s, structure.graph.neighbors(s).count()))
                 .collect();
 
@@ -262,12 +261,17 @@ fn label_formula(
         _ => panic!("Error: Operator {:?} should be converted!", formula),
     }
 }
-fn verify(formula: CtlFormula, structure: &KripkeStructure) {
+fn verify(formula: CtlFormula, structure: &KripkeStructure) -> bool {
     let mut provider = LabelingProvider::new();
 
     let canonical_formula = convert_equivalence(&formula);
 
     label_formula(&canonical_formula, structure, &mut provider);
+
+    structure
+        .initial_states
+        .iter()
+        .all(|&s| provider.is_labeled(s, &canonical_formula))
 }
 
 #[cfg(test)]
