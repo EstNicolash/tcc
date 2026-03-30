@@ -1,0 +1,41 @@
+// ctl.pest
+
+WHITESPACE = _ { " " | "\t" | "\r" | "\n" }
+
+main = { SOI ~ formula ~ EOI }
+
+formula = { implication }
+
+op_imply = { "->" }
+op_or    = { "|" }
+op_and   = { "&" }
+
+
+implication = { or ~ (op_imply ~ or)* }
+or          = { and ~ (op_or ~ and)* }
+and         = { temporal_binary ~ (op_and ~ temporal_binary)* }
+
+eu = { "E[" ~ formula ~ "U" ~ formula ~ "]" }
+au = { "A[" ~ formula ~ "U" ~ formula ~ "]" }
+temporal_binary = {
+    eu
+    | au
+    | unary
+}
+
+unary_op = { "EX" | "AX" | "EF" | "AF" | "EG" | "AG" | "!" }
+unary = {
+    unary_op ~ unary
+    | primary
+}
+
+
+primary = {
+    "(" ~ formula ~ ")"
+    | constant
+    | proposition
+}
+
+constant = { "true" | "false" }
+
+proposition = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }

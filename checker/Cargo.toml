@@ -7,7 +7,9 @@ authors = ["Nicolas A. N. S"]
 [dependencies]
 petgraph = "0.6"
 thiserror = "1.0"
-logos = "0.14" 
+logos = "0.14"
+pest = "2.8.6"
+pest_derive = "2.8.6"
 
 [dev-dependencies]
 assert_matches = "1.5"

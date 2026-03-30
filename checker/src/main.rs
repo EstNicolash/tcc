@@ -1,6 +1,7 @@
 mod formula;
 mod kripke_structure;
 mod labelling;
+mod parser;
 use formula::CtlFormula;
 
 use petgraph::graph::DiGraph;

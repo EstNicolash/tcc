@@ -294,7 +294,7 @@ fn verify(structure: &KripkeStructure, formula: &CtlFormula) -> bool {
 
     label_formula(&canonical_formula, structure, &mut provider);
 
-    provider.debug_print(&structure);
+    //provider.debug_print(&structure);
 
     structure
         .initial_states
@@ -419,8 +419,6 @@ fn test_traffic_light_from_nusmv_spec() {
     )));
 
     // --- Verification ---
-
-    // Debug print to verify state labels
 
     // Test Spec 1: Should be true since 0 -> 1 -> 2
     assert!(
