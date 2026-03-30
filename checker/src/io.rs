@@ -1,5 +1,5 @@
 use crate::formula::CtlFormula;
-use crate::kripke_structure::KripkeStructure;
+use crate::model::Model;
 use crate::parser::parse_ctl_formula;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
@@ -34,8 +34,8 @@ pub fn load_formulas_from_file(path: &str) -> Result<Vec<CtlFormula>, String> {
 
     Ok(formulas)
 }
-pub fn load_model_from_prism(lab_path: &str, tra_path: &str) -> Result<KripkeStructure, String> {
-    let mut structure = KripkeStructure::new();
+pub fn load_model_from_prism(lab_path: &str, tra_path: &str) -> Result<Model, String> {
+    let mut structure = Model::new();
 
     // 1. Parse Labels (.lab file)
     let lab_file = File::open(lab_path).map_err(|e| format!("Failed to open .lab file: {}", e))?;

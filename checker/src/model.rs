@@ -1,14 +1,14 @@
 use petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::HashSet;
 
-pub struct KripkeStructure {
+pub struct Model {
     pub graph: DiGraph<String, ()>,
     pub initial_labels: std::collections::HashMap<NodeIndex, HashSet<String>>,
     pub initial_states: HashSet<NodeIndex>,
 }
 
-impl KripkeStructure {
-    /// Initializes a new, empty Kripke Structure.
+impl Model {
+    /// Initializes a new, empty Model.
     pub fn new() -> Self {
         Self {
             graph: DiGraph::new(),

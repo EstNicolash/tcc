@@ -1,5 +1,5 @@
 use crate::formula::{self, CtlFormula};
-use crate::kripke_structure::KripkeStructure;
+use crate::model::Model;
 use petgraph::Direction;
 use petgraph::graph::{NodeIndex, NodeWeightsMut};
 use std::collections::{HashMap, HashSet};
@@ -20,7 +20,7 @@ impl LabelingProvider {
 
     /// Checks if a specific state satisfies a given formula.
     /// # Arguments
-    /// * `state` - The index of the state in the Kripke Structure.
+    /// * `state` - The index of the state in the Model.
     /// * `formula` - The CTL (sub)formula to check.
     /// Returns `true` if the state is already marked with this formula.
     pub fn is_labeled(&self, state: NodeIndex, formula: &CtlFormula) -> bool {
@@ -54,7 +54,7 @@ impl LabelingProvider {
             .collect()
     }
 
-    pub fn debug_print(&self, structure: &KripkeStructure) {
+    pub fn debug_print(&self, structure: &Model) {
         println!("\n--- DEBUG: STATE LABELS ---");
         for state in structure.graph.node_indices() {
             let name = &structure.graph[state];
@@ -136,11 +136,7 @@ pub fn convert_equivalence(formula: &CtlFormula) -> CtlFormula {
     }
 }
 
-fn label_formula(
-    formula: &CtlFormula,
-    structure: &KripkeStructure,
-    provider: &mut LabelingProvider,
-) {
+fn label_formula(formula: &CtlFormula, structure: &Model, provider: &mut LabelingProvider) {
     match formula {
         CtlFormula::True => {
             // Fix: True must be labeled in ALL states for EU(True, f) to work
@@ -287,7 +283,7 @@ fn label_formula(
         _ => panic!("Error: Operator {:?} should be converted!", formula),
     }
 }
-pub fn verify(structure: &KripkeStructure, formula: &CtlFormula) -> bool {
+pub fn verify(structure: &Model, formula: &CtlFormula) -> bool {
     let mut provider = LabelingProvider::new();
 
     let canonical_formula = convert_equivalence(&formula);
@@ -390,7 +386,7 @@ mod tests {
 }
 #[test]
 fn test_traffic_light_from_nusmv_spec() {
-    let mut model = KripkeStructure::new();
+    let mut model = Model::new();
 
     // State 0: has labels "init" and "is_green"
     let s0 = model.add_state("s0", vec!["init".to_string(), "is_green".to_string()], true);

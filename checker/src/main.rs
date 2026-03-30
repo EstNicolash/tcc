@@ -1,7 +1,7 @@
 mod formula;
 mod io;
-mod kripke_structure;
 mod labelling;
+mod model;
 mod parser;
 
 use colored::*;
@@ -24,7 +24,7 @@ fn main() {
     );
     println!("Reading files from: {}/\n", folder.cyan());
 
-    // 2. Load the Kripke Structure (Model)
+    // 2. Load the Model
     let model = match io::load_model_from_prism(&lab_path, &tra_path) {
         Ok(m) => m,
         Err(e) => {
