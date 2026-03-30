@@ -1,3 +1,4 @@
+use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CtlFormula {
     True,
@@ -15,4 +16,26 @@ pub enum CtlFormula {
     AG(Box<CtlFormula>),
     EF(Box<CtlFormula>),
     EG(Box<CtlFormula>),
+}
+
+impl fmt::Display for CtlFormula {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CtlFormula::True => write!(f, "true"),
+            CtlFormula::False => write!(f, "false"),
+            CtlFormula::Prop(s) => write!(f, "{}", s),
+            CtlFormula::Not(phi) => write!(f, "!{}", phi),
+            CtlFormula::And(phi, psi) => write!(f, "({} & {})", phi, psi),
+            CtlFormula::Or(phi, psi) => write!(f, "({} | {})", phi, psi),
+            CtlFormula::Imply(phi, psi) => write!(f, "({} -> {})", phi, psi),
+            CtlFormula::EX(phi) => write!(f, "EX {}", phi),
+            CtlFormula::AX(phi) => write!(f, "AX {}", phi),
+            CtlFormula::EF(phi) => write!(f, "EF {}", phi),
+            CtlFormula::AF(phi) => write!(f, "AF {}", phi),
+            CtlFormula::EG(phi) => write!(f, "EG {}", phi),
+            CtlFormula::AG(phi) => write!(f, "AG {}", phi),
+            CtlFormula::EU(phi, psi) => write!(f, "E[{} U {}]", phi, psi),
+            CtlFormula::AU(phi, psi) => write!(f, "A[{} U {}]", phi, psi),
+        }
+    }
 }

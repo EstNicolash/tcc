@@ -15,3 +15,4 @@ ASSIGN
 
 LTLSPEC G (estado = verde -> F (estado = vermelho))
 CTLSPEC EF (estado = vermelho)
+CTLSPEC E [estado = amarelo U estado=vermelho ]

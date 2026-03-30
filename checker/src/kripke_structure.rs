@@ -25,15 +25,12 @@ impl KripkeStructure {
     /// * `is_initial` - Whether this state belongs to the set of initial states S0.
     ///
     /// Returns the `NodeIndex` which is required to create transitions.
-    pub fn add_state(&mut self, name: &str, labels: Vec<&str>, is_initial: bool) -> NodeIndex {
-        // 1. Add the node to the graph
+    pub fn add_state(&mut self, name: &str, labels: Vec<String>, is_initial: bool) -> NodeIndex {
         let index = self.graph.add_node(name.to_string());
 
-        // 2. Register the propositions in the initial_labels map
-        let prop_set: HashSet<String> = labels.into_iter().map(|s| s.to_string()).collect();
+        let prop_set: HashSet<String> = labels.into_iter().collect();
         self.initial_labels.insert(index, prop_set);
 
-        // 3. If it's an initial state, add it to S0
         if is_initial {
             self.initial_states.insert(index);
         }

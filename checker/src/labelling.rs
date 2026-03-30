@@ -287,7 +287,7 @@ fn label_formula(
         _ => panic!("Error: Operator {:?} should be converted!", formula),
     }
 }
-fn verify(structure: &KripkeStructure, formula: &CtlFormula) -> bool {
+pub fn verify(structure: &KripkeStructure, formula: &CtlFormula) -> bool {
     let mut provider = LabelingProvider::new();
 
     let canonical_formula = convert_equivalence(&formula);
@@ -393,11 +393,11 @@ fn test_traffic_light_from_nusmv_spec() {
     let mut model = KripkeStructure::new();
 
     // State 0: has labels "init" and "is_green"
-    let s0 = model.add_state("s0", vec!["init", "is_green"], true);
+    let s0 = model.add_state("s0", vec!["init".to_string(), "is_green".to_string()], true);
     // State 1: has label "is_yellow"
-    let s1 = model.add_state("s1", vec!["is_yellow"], false);
+    let s1 = model.add_state("s1", vec!["is_yellow".to_string()], false);
     // State 2: has label "is_red"
-    let s2 = model.add_state("s2", vec!["is_red"], false);
+    let s2 = model.add_state("s2", vec!["is_red".to_string()], false);
 
     // 2. Add transitions from out.tra (0 -> 1, 1 -> 2, 2 -> 0)
     model.add_transition(s0, s1);
