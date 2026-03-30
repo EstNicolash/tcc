@@ -1,4 +1,5 @@
 mod formula;
+mod io;
 mod kripke_structure;
 mod labelling;
 mod parser;
