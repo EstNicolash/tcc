@@ -1,0 +1,55 @@
+38 54 54
+0 0 1 1 game_over
+1 0 1 1 game_over
+2 0 26 1 respawn
+3 0 27 1 respawn
+4 0 28 1 respawn
+5 0 6 1 game_over
+6 0 6 1 game_over
+7 0 26 1 respawn
+8 0 27 1 respawn
+9 0 28 1 respawn
+10 0 14 1 loot
+10 1 0 1 loot
+11 0 16 1 loot
+11 1 2 1 loot
+12 0 18 1 loot
+12 1 3 1 loot
+13 0 20 1 loot
+13 1 4 1 loot
+14 0 15 1 win
+14 1 14 1 loot
+14 2 5 1 loot
+15 0 15 1
+16 0 17 1 win
+16 1 16 1 loot
+16 2 7 1 loot
+17 0 17 1
+18 0 19 1 win
+18 1 18 1 loot
+18 2 8 1 loot
+19 0 19 1
+20 0 21 1 win
+20 1 20 1 loot
+20 2 9 1 loot
+21 0 21 1
+22 0 22 1
+23 0 23 1
+24 0 24 1
+25 0 25 1
+26 0 30 1 search
+26 1 34 1 search
+27 0 31 1 search
+27 1 35 1 search
+28 0 32 1 search
+28 1 36 1 search
+29 0 33 1 search
+29 1 37 1 search
+30 0 10 1 unlock
+31 0 11 1 unlock
+32 0 12 1 unlock
+33 0 13 1 unlock
+34 0 22 1 disarm
+35 0 23 1 disarm
+36 0 24 1 disarm
+37 0 25 1 disarm

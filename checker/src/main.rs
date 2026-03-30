@@ -10,7 +10,7 @@ use labelling::verify;
 fn main() {
     // 1. Configuration and Paths
     let folder = "examples";
-    let base_name = "sem";
+    let base_name = "chest";
 
     let lab_path = format!("{}/{}.lab", folder, base_name);
     let tra_path = format!("{}/{}.tra", folder, base_name);

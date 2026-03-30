@@ -1,0 +1,48 @@
+mdp
+
+module chest
+    locked : bool init true;
+    alive : bool init true;
+    trapped : bool init true;
+    inventory : [0..3] init 0; // 0:empty, 1:key, 2:disarmer, 3:treasure
+    hp : [0..3] init 3;
+    gs : [0..2] init 0; // 0:running, 1:solved, 2:lost
+
+    // ACTION: Find an item (If empty-handed)
+    [search] alive & inventory=0 & gs=0 -> (inventory'=1); // Find key
+    [search] alive & inventory=0 & gs=0 -> (inventory'=2); // Find disarmer
+
+    // ACTION: Unlock the chest (Needs key)
+    [unlock] alive & inventory=1 & locked & gs=0 -> (locked'=false);
+    
+    // ACTION: Disarm the trap (Needs disarmer)
+    [disarm] alive & inventory=2 & trapped & gs=0 -> (trapped'=false);
+
+    // ACTION: Pick up the treasure (Needs chest to be unlocked)
+    [loot] alive & !locked & gs=0 -> (inventory'=3);
+
+    // SYSTEM: Trap Triggered (Passive event if opened while trapped)
+    // Note: We move the death logic to happen when looting a trapped chest
+    [loot] alive & !locked & trapped & gs=0 -> (alive'=false);
+
+    // SYSTEM: Respawn logic
+    [respawn] !alive & hp > 0 -> (alive'=true) & (hp'=hp-1) & (locked'=true) & (inventory'=0);
+    [game_over] !alive & hp = 0 -> (gs'=2);
+
+    // SYSTEM: Victory
+    [win] alive & inventory=3 & gs=0 -> (gs'=1);
+
+endmodule
+
+// Labels (keep these the same for your Rust parser)
+label "is_alive" = alive=true;
+label "is_locked" = locked=true;
+label "is_trapped" = trapped=true;
+label "has_treasure" = inventory=3;
+label "is_solved" = gs=1;
+label "is_lost" = gs=2;
+label "hp3" = hp=3;
+label "hp2" = hp=2;
+label "hp1" = hp=1;
+label "hp0" = hp=0;
+label "has_no_items" = inventory=0;
