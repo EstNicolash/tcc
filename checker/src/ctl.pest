@@ -10,13 +10,14 @@ op_imply = { "->" }
 op_or    = { "|" }
 op_and   = { "&" }
 
-
 implication = { or ~ (op_imply ~ or)* }
 or          = { and ~ (op_or ~ and)* }
 and         = { temporal_binary ~ (op_and ~ temporal_binary)* }
 
+// Operadores binários de CTL
 eu = { "E[" ~ formula ~ "U" ~ formula ~ "]" }
 au = { "A[" ~ formula ~ "U" ~ formula ~ "]" }
+
 temporal_binary = {
     eu
     | au
@@ -29,7 +30,6 @@ unary = {
     | primary
 }
 
-
 primary = {
     "(" ~ formula ~ ")"
     | constant
@@ -38,4 +38,13 @@ primary = {
 
 constant = { "true" | "false" }
 
-proposition = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+proposition = @{
+    !unary_op ~ !constant ~
+    ( !(WHITESPACE* ~ "U" ~ WHITESPACE+) ~ char_prop )+
+}
+
+char_prop = _{ bracket_part | base_char }
+
+base_char = _{ ASCII_ALPHANUMERIC | "_" | "." | "=" }
+
+bracket_part = _{ "[" ~ base_char* ~ "]" }

@@ -45,4 +45,21 @@ impl Model {
     pub fn get_all_states(&self) -> petgraph::graph::NodeIndices {
         self.graph.node_indices()
     }
+
+    /*
+    pub fn get_labels(&self, state: NodeIndex) -> Option<&HashSet<String>> {
+        self.initial_labels.get(&state)
+    }*/
+
+    pub fn make_total(&mut self) {
+        let deadlocks: Vec<NodeIndex> = self
+            .graph
+            .node_indices()
+            .filter(|&state| self.graph.neighbors(state).count() == 0)
+            .collect();
+
+        for state in deadlocks {
+            self.graph.add_edge(state, state, ());
+        }
+    }
 }

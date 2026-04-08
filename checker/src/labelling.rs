@@ -1,7 +1,7 @@
-use crate::formula::{self, CtlFormula};
+use crate::formula::CtlFormula;
 use crate::model::Model;
 use petgraph::Direction;
-use petgraph::graph::{NodeIndex, NodeWeightsMut};
+use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
 
 /// The `LabelingProvider` acts as a centralized truth table for the Model Checking process.
@@ -29,14 +29,11 @@ impl LabelingProvider {
             .map_or(false, |set| set.contains(&state))
     }
 
-    /// Records that a state satisfies a formula.
-    /// * `state` - The index of the state to be marked.
-    /// * `formula` - The formula that is true in this state.
     pub fn add_label(&mut self, state: NodeIndex, formula: CtlFormula) {
         self.marks.entry(formula).or_default().insert(state);
     }
+    /*
 
-    /// Returns all states that satisfy a specific formula.
     pub fn get_states_for_formula(&self, formula: &CtlFormula) -> Option<&HashSet<NodeIndex>> {
         self.marks.get(formula)
     }
@@ -49,7 +46,7 @@ impl LabelingProvider {
     pub fn get_labels(&self, state: NodeIndex) -> Vec<CtlFormula> {
         self.marks
             .iter()
-            .filter(|(_, states)| states.contains(&state)) // Se o estado está no set daquela fórmula
+            .filter(|(_, states)| states.contains(&state))
             .map(|(formula, _)| formula.clone())
             .collect()
     }
@@ -58,12 +55,11 @@ impl LabelingProvider {
         println!("\n--- DEBUG: STATE LABELS ---");
         for state in structure.graph.node_indices() {
             let name = &structure.graph[state];
-            // Usando o método correto aqui
             let labels = self.get_labels(state);
             println!("State {:?} ({}): {:?}", state, name, labels);
         }
         println!("---------------------------\n");
-    }
+    }*/
 }
 
 pub fn convert_equivalence(formula: &CtlFormula) -> CtlFormula {
@@ -222,12 +218,16 @@ fn label_formula(formula: &CtlFormula, structure: &Model, provider: &mut Labelin
             label_formula(f2, structure, provider);
 
             let mut todo: Vec<NodeIndex> = Vec::new();
+
+            //If a state satisfies f2, mark it wiht EU formula and add its predecessors to the todo list.
             for state in structure.get_all_states() {
                 if provider.is_labeled(state, f2) {
                     todo.push(state);
                     provider.add_label(state, formula.clone());
                 }
             }
+
+            //For each state in the todo list, if its predecessor satisfies f1 and is not already labeled, mark it and add it to the todo list.
             while let Some(state) = todo.pop() {
                 let predecessors = structure
                     .graph
@@ -252,6 +252,7 @@ fn label_formula(formula: &CtlFormula, structure: &Model, provider: &mut Labelin
                 .map(|s| (s, structure.graph.neighbors(s).count()))
                 .collect();
 
+            // For each state, if it satisfies f and is not already labeled, mark it and add it to the todo list.
             for state in structure.get_all_states() {
                 if provider.is_labeled(state, f) {
                     provider.add_label(state, formula.clone());
@@ -259,6 +260,7 @@ fn label_formula(formula: &CtlFormula, structure: &Model, provider: &mut Labelin
                 }
             }
 
+            // For each state in the todo list, if its predecessor satisfies f and is not already labeled, mark it and add it to the todo list.
             while let Some(state) = todo.pop() {
                 for pred in structure
                     .graph
@@ -267,6 +269,7 @@ fn label_formula(formula: &CtlFormula, structure: &Model, provider: &mut Labelin
                     if provider.is_labeled(pred, &formula) {
                         continue;
                     }
+
                     if let Some(count) = out_degree.get_mut(&pred) {
                         if *count > 0 {
                             *count -= 1;
@@ -287,6 +290,10 @@ pub fn verify(structure: &Model, formula: &CtlFormula) -> bool {
     let mut provider = LabelingProvider::new();
 
     let canonical_formula = convert_equivalence(&formula);
+
+    for state in structure.get_all_states() {
+        provider.add_label(state, CtlFormula::True);
+    }
 
     label_formula(&canonical_formula, structure, &mut provider);
 

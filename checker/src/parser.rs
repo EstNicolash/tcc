@@ -142,4 +142,43 @@ mod tests {
         let f2 = parse_ctl_formula("AG  (  p  )").unwrap();
         assert_eq!(f1, f2);
     }
+
+    #[test]
+    fn test_parse_large_conjunction_with_special_chars() {
+        let input = "EF (cId[0]=1 & p.state=WAIT & req[1]=0 & guard_1=true & M1=3)";
+        let f = parse_ctl_formula(input);
+
+        assert!(
+            f.is_ok(),
+            "Falha ao processar fórmula com caracteres especiais: {:?}",
+            f.err()
+        );
+
+        let formula = f.unwrap();
+        if let CtlFormula::EF(inner) = formula {
+            assert!(matches!(*inner, CtlFormula::And(_, _)));
+        } else {
+            panic!("Esperado operador EF no topo");
+        }
+    }
+
+    #[test]
+    fn test_parse_binary_temporal_until() {
+        // E [ f1 U f2 ] e A [ f1 U f2 ]
+        let input = "E[p U q]";
+        let f = parse_ctl_formula(input).unwrap();
+        assert!(matches!(f, CtlFormula::EU(_, _)));
+
+        let input2 = "A[p U q]";
+        let f2 = parse_ctl_formula(input2).unwrap();
+        assert!(matches!(f2, CtlFormula::AU(_, _)));
+    }
+
+    #[test]
+    fn test_parse_nested_parentheses() {
+        // Teste de aninhamento profundo para garantir que a recursão do parser está ok
+        let input = "AG(p -> (EX(q & (r | !s))))";
+        let f = parse_ctl_formula(input);
+        assert!(f.is_ok());
+    }
 }

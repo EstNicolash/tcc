@@ -10,22 +10,23 @@ use labelling::verify;
 fn main() {
     // 1. Configuration and Paths
     let folder = "examples";
-    let base_name = "chest";
+    let base_name = "FMS2";
 
-    let lab_path = format!("{}/{}.lab", folder, base_name);
-    let tra_path = format!("{}/{}.tra", folder, base_name);
+    let fsm_path = format!("{}/{}.fsm", folder, base_name);
+    let pnml_path = format!("{}/{}.pnml", folder, base_name);
     let spec_path = format!("{}/{}.spec", folder, base_name);
 
     println!(
         "{}",
-        format!("--- Model Checker: {} ---", base_name)
+        format!("--- Model Checker (FSM Mode): {} ---", base_name)
             .bold()
             .blue()
     );
     println!("Reading files from: {}/\n", folder.cyan());
 
-    // 2. Load the Model
-    let model = match io::load_model_from_prism(&lab_path, &tra_path) {
+    // 2. Load the Model using both FSM (graph) and PNML (metadata)
+    // Updated to pass two arguments
+    let model = match io::load_model_from_fsm(&fsm_path, &pnml_path) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("{} {}", "Model error:".red().bold(), e);
@@ -60,7 +61,6 @@ fn main() {
             "FALSE".red().bold()
         };
 
-        // Uses the Display trait implementation for CtlFormula
         println!(
             "{:>2}. [{}] {}\n    └─ Result: {}",
             i + 1,
