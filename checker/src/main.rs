@@ -1,59 +1,53 @@
-mod formula;
+mod algorithms;
+mod cli;
+mod core;
 mod io;
-mod labelling;
-mod model;
-mod parser;
+mod modeling;
+mod specs;
 
+use clap::Parser;
+use cli::{Algorithm, Args, InputFormat};
 use colored::*;
-use labelling::verify;
-
 fn main() {
-    // 1. Configuration and Paths
-    let folder = "examples";
-    let base_name = "FMS2";
-
-    let fsm_path = format!("{}/{}.fsm", folder, base_name);
-    let pnml_path = format!("{}/{}.pnml", folder, base_name);
-    let spec_path = format!("{}/{}.spec", folder, base_name);
+    let args = Args::parse();
 
     println!(
         "{}",
-        format!("--- Model Checker (FSM Mode): {} ---", base_name)
-            .bold()
-            .blue()
+        format!("--- Model Checker: {} ---", args.model_path.bold()).blue()
     );
-    println!("Reading files from: {}/\n", folder.cyan());
 
-    // 2. Load the Model using both FSM (graph) and PNML (metadata)
-    // Updated to pass two arguments
-    let model = match io::load_model_from_fsm(&fsm_path, &pnml_path) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("{} {}", "Model error:".red().bold(), e);
-            return;
+    let model = match args.format {
+        InputFormat::Pnml => {
+            let fsm_path = args.model_path.replace(".pnml", ".fsm");
+            io::load_pnml_fsm::load_pnml_fsm(&fsm_path, &args.model_path)
         }
-    };
+        InputFormat::Prism => {
+            let fsm_path = args.model_path.replace(".prism", ".fsm");
+            io::load_prism_fsm::load_prism_fsm(&fsm_path, &args.model_path)
+        }
+    }
+    .unwrap_or_else(|e| {
+        eprintln!("{} {}", "Error loading model:".red().bold(), e);
+        std::process::exit(1);
+    });
 
-    // 3. Load Specifications (CTL Formulas)
-    let formulas = match io::load_formulas_from_file(&spec_path) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("{} {}", "Formula error:".red().bold(), e);
-            return;
-        }
-    };
+    let formulas = io::load_formulas::load_formulas(&args.spec_path).unwrap_or_else(|e| {
+        eprintln!("{} {}", "Error loading formulas:".red().bold(), e);
+        std::process::exit(1);
+    });
 
     println!(
-        "{} Graph with {} states and {} formulas loaded.",
+        "{} Model loaded via {:?} ({} states). {} formulas found.\n",
         "✔".green(),
+        args.format,
         model.graph.node_count(),
         formulas.len()
     );
-    println!("--------------------------------------------------\n");
 
-    // 4. Verification Loop
     for (i, phi) in formulas.iter().enumerate() {
-        let is_valid = verify(&model, phi);
+        let is_valid = match args.algorithm {
+            Algorithm::Labelling => algorithms::labelling::verify(&model, phi),
+        };
 
         let result_text = if is_valid {
             "TRUE".green().bold()

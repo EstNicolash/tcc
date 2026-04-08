@@ -1,10 +1,10 @@
-use crate::formula::CtlFormula;
+use crate::specs::ctl_formula::CtlFormula;
 use pest::Parser;
 use pest::iterators::Pair;
 use pest_derive::Parser;
 
 #[derive(Parser)]
-#[grammar = "ctl.pest"]
+#[grammar = "specs/ctl.pest"]
 pub struct CtlParser;
 
 /// Entry point to parse a string into a CtlFormula
@@ -30,7 +30,6 @@ fn parse_expr(pair: Pair<Rule>) -> CtlFormula {
             //[Pair(Rule::algo1),Pair(Rule::algo2)]
             let mut left = parse_expr(inner.next().unwrap());
 
-            // Now 'op' will correctly be Rule::op_and, Rule::op_or, etc.
             while let Some(op) = inner.next() {
                 let right = parse_expr(inner.next().unwrap());
                 left = match op.as_rule() {
@@ -150,7 +149,7 @@ mod tests {
 
         assert!(
             f.is_ok(),
-            "Falha ao processar fórmula com caracteres especiais: {:?}",
+            "Failed to process formula with special characters: {:?}",
             f.err()
         );
 
@@ -158,7 +157,7 @@ mod tests {
         if let CtlFormula::EF(inner) = formula {
             assert!(matches!(*inner, CtlFormula::And(_, _)));
         } else {
-            panic!("Esperado operador EF no topo");
+            panic!("Expected operator EF at the top level");
         }
     }
 
@@ -176,7 +175,6 @@ mod tests {
 
     #[test]
     fn test_parse_nested_parentheses() {
-        // Teste de aninhamento profundo para garantir que a recursão do parser está ok
         let input = "AG(p -> (EX(q & (r | !s))))";
         let f = parse_ctl_formula(input);
         assert!(f.is_ok());

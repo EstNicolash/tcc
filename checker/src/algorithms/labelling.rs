@@ -1,5 +1,5 @@
-use crate::formula::CtlFormula;
-use crate::model::Model;
+use crate::core::kripke_structure::KripkeStructure;
+use crate::specs::ctl_formula::CtlFormula;
 use petgraph::Direction;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
@@ -132,7 +132,11 @@ pub fn convert_equivalence(formula: &CtlFormula) -> CtlFormula {
     }
 }
 
-fn label_formula(formula: &CtlFormula, structure: &Model, provider: &mut LabelingProvider) {
+fn label_formula(
+    formula: &CtlFormula,
+    structure: &KripkeStructure,
+    provider: &mut LabelingProvider,
+) {
     match formula {
         CtlFormula::True => {
             // Fix: True must be labeled in ALL states for EU(True, f) to work
@@ -286,7 +290,7 @@ fn label_formula(formula: &CtlFormula, structure: &Model, provider: &mut Labelin
         _ => panic!("Error: Operator {:?} should be converted!", formula),
     }
 }
-pub fn verify(structure: &Model, formula: &CtlFormula) -> bool {
+pub fn verify(structure: &KripkeStructure, formula: &CtlFormula) -> bool {
     let mut provider = LabelingProvider::new();
 
     let canonical_formula = convert_equivalence(&formula);
@@ -393,7 +397,7 @@ mod tests {
 }
 #[test]
 fn test_traffic_light_from_nusmv_spec() {
-    let mut model = Model::new();
+    let mut model = KripkeStructure::new();
 
     // State 0: has labels "init" and "is_green"
     let s0 = model.add_state("s0", vec!["init".to_string(), "is_green".to_string()], true);
