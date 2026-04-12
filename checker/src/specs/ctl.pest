@@ -1,22 +1,26 @@
 // ctl.pest
+// CTL formula grammar — merged into ssmv_complete_grammar.pest at build time
 
 WHITESPACE = _ { " " | "\t" | "\r" | "\n" }
 
 main = { SOI ~ formula ~ EOI }
 
-formula = { implication }
 
 op_imply = { "->" }
+op_iff   = { "<->" }
 op_or    = { "|" }
 op_and   = { "&" }
 
-implication = { or ~ (op_imply ~ or)* }
-or          = { and ~ (op_or ~ and)* }
+
+formula     = { implication }
+implication = { iff ~ (op_imply ~ implication)? }
+iff         = { or  ~ (op_iff   ~ or)*          }
+or          = { and ~ (op_or    ~ and)*          }
 and         = { temporal_binary ~ (op_and ~ temporal_binary)* }
 
-// Operadores binários de CTL
-eu = { "E[" ~ formula ~ "U" ~ formula ~ "]" }
-au = { "A[" ~ formula ~ "U" ~ formula ~ "]" }
+
+eu = { "E" ~ "[" ~ formula ~ "U" ~ formula ~ "]" }
+au = { "A" ~ "[" ~ formula ~ "U" ~ formula ~ "]" }
 
 temporal_binary = {
     eu
@@ -24,11 +28,15 @@ temporal_binary = {
     | unary
 }
 
-unary_op = { "EX" | "AX" | "EF" | "AF" | "EG" | "AG" | "!" }
+
+unary_op = @{ ("EX" | "AX" | "EF" | "AF" | "EG" | "AG") ~ !char_prop }
+
 unary = {
     unary_op ~ unary
+    | "!" ~ unary
     | primary
 }
+
 
 primary = {
     "(" ~ formula ~ ")"
@@ -36,15 +44,17 @@ primary = {
     | proposition
 }
 
-constant = { "true" | "false" }
+
+constant = { ^"true" | ^"false" }
+
 
 proposition = @{
-    !unary_op ~ !constant ~
-    ( !(WHITESPACE* ~ "U" ~ WHITESPACE+) ~ char_prop )+
+    !unary_op
+    ~ !(^"true" | ^"false")
+    ~ char_prop+
 }
 
-char_prop = _{ bracket_part | base_char }
 
-base_char = _{ ASCII_ALPHANUMERIC | "_" | "." | "=" }
-
+char_prop    = _{ bracket_part | base_char }
+base_char    = _{ ASCII_ALPHANUMERIC | "_" | "." | "=" }
 bracket_part = _{ "[" ~ base_char* ~ "]" }

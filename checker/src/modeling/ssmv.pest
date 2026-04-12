@@ -1,0 +1,110 @@
+// ssmv.pest
+
+WHITESPACE = _ { " " | "\t" | "\r" | "\n" }
+COMMENT    = _ { "--" ~ (!"\n" ~ ANY)* }
+
+ssmv_main = { SOI ~ ssmv_module_main ~ EOI }
+
+ssmv_module_main = {
+    "MODULE" ~ "main" ~
+    ssmv_var_section? ~
+    ssmv_define_section? ~
+    ssmv_assign_section? ~
+    ssmv_spec_section*
+}
+
+ssmv_var_section    = { "VAR"    ~ (ssmv_var_decl    ~ ";")+ }
+ssmv_define_section = { "DEFINE" ~ (ssmv_define_decl ~ ";")+ }
+ssmv_assign_section = { "ASSIGN" ~ (ssmv_assignment  ~ ";")+ }
+
+ssmv_var_decl = { ssmv_ident ~ ":" ~ ssmv_var_type }
+ssmv_var_type = { "boolean" | ssmv_enum_type | ssmv_range_type }
+ssmv_enum_type   = { "{" ~ ssmv_ident ~ ("," ~ ssmv_ident)* ~ "}" }
+ssmv_range_type  = { ssmv_signed_number ~ ".." ~ ssmv_signed_number }
+
+ssmv_define_decl = { ssmv_ident ~ ":=" ~ ssmv_expression }
+ssmv_assignment  = { ssmv_init_assign | ssmv_next_assign }
+ssmv_init_assign = { "init(" ~ ssmv_ident ~ ") :=" ~ ssmv_expression }
+ssmv_next_assign = { "next(" ~ ssmv_ident ~ ") :=" ~ ssmv_expression }
+
+ssmv_expression  = { ssmv_implication }
+ssmv_implication = { ssmv_logical_or  ~ ("->"          ~ ssmv_logical_or)* }
+ssmv_logical_or  = { ssmv_logical_and ~ (ssmv_or_op   ~ ssmv_logical_and)* }
+ssmv_logical_and = { ssmv_comparison  ~ (ssmv_and_op  ~ ssmv_comparison)* }
+ssmv_comparison  = { ssmv_term        ~ (ssmv_comp_op ~ ssmv_term)* }
+ssmv_term        = { ssmv_factor      ~ (ssmv_add_op  ~ ssmv_factor)* }
+ssmv_factor      = { ssmv_unary       ~ (ssmv_mul_op  ~ ssmv_unary)* }
+ssmv_unary       = { ssmv_unary_op?   ~ ssmv_primary }
+
+ssmv_unary_op = { "!" | "not" | "-" }
+ssmv_or_op    = { "|" | "or" }
+ssmv_and_op   = { "&" | "and" }
+ssmv_add_op   = { "+" | "-" }
+ssmv_mul_op   = { "*" | "/" }
+ssmv_comp_op  = { "!=" | "<=" | ">=" | "<" | ">" | "=" }
+
+ssmv_primary = {
+    ssmv_number
+    | ssmv_boolean_const
+    | ssmv_set_const
+    | ssmv_case_expression
+    | ssmv_ident
+    | "(" ~ ssmv_expression ~ ")"
+}
+
+ssmv_boolean_const   = { "TRUE" | "FALSE" }
+ssmv_set_const       = { "{" ~ ssmv_primary ~ ("," ~ ssmv_primary)* ~ "}" }
+ssmv_case_expression = { "case" ~ (ssmv_case_arm ~ ";")+ ~ "esac" }
+ssmv_case_arm        = { ssmv_expression ~ ":" ~ ssmv_expression }
+
+ssmv_spec_section = { "CTLSPEC" ~ formula ~ ";"? }
+
+ssmv_keyword = {
+    "MODULE" | "VAR" | "DEFINE" | "ASSIGN" | "CTLSPEC" |
+    "case"   | "esac"  | "init" | "next"   |
+    "TRUE"   | "FALSE" | "boolean"          |
+    "not"    | "and"   | "or"               |
+    "EX" | "AX" | "EF" | "AF" | "EG" | "AG"
+}
+
+ssmv_ident         = @{ !ssmv_keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_" | ".")* }
+ssmv_number        = @{ ASCII_DIGIT+ }
+ssmv_signed_number = @{ "-"? ~ ASCII_DIGIT+ }
+
+
+
+op_imply = { "->" }
+op_iff   = { "<->" }
+op_or    = { "|" }
+op_and   = { "&" }
+
+formula     = { implication }
+implication = { iff ~ (op_imply ~ implication)? }
+iff         = { or  ~ (op_iff   ~ or)* }
+or          = { and ~ (op_or    ~ and)* }
+and         = { temporal_binary ~ (op_and ~ temporal_binary)* }
+
+eu = { "E" ~ "[" ~ formula ~ "U" ~ formula ~ "]" }
+au = { "A" ~ "[" ~ formula ~ "U" ~ formula ~ "]" }
+
+temporal_binary = {
+    eu
+    | au
+    | unary
+}
+
+unary_op = @{ ("EX" | "AX" | "EF" | "AF" | "EG" | "AG") ~ !(ASCII_ALPHANUMERIC | "_") }
+
+unary = {
+    unary_op ~ unary
+    | "!" ~ unary
+    | primary
+}
+
+primary = {
+    "(" ~ formula ~ ")"
+    | constant
+    | proposition
+}
+proposition = { ssmv_comparison }
+constant = { ^"true" | ^"false" }

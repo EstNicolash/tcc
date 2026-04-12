@@ -69,23 +69,23 @@ ASSIGN
 		 
 			
 -- 1) Se o jogador abrir o baú enquanto a armadilha estiver ativa ele tem que morrer.
-LTLSPEC G (alive & !locked & trapped -> X(!alive))
+--LTLSPEC G (alive & !locked & trapped -> X(!alive))
 CTLSPEC AG (alive & !locked & trapped -> AX(!alive))
 
 -- 2) Se o jogador abrir o bau e morrer, o baú se tranca novamente para a próxima tentativa
-LTLSPEC G (!alive -> X(locked))
+--LTLSPEC G (!alive -> X(locked))
 CTLSPEC AG (!alive -> AX(locked))
 
 -- 3) É impossível o jogador possuir o treasure se o baú ainda estiver trancado.
-LTLSPEC G!(inventory = treasure & locked)
+--LTLSPEC G!(inventory = treasure & locked)
 CTLSPEC !EF(inventory = treasure & locked)
 
 -- 4) O HP nunca pode aumentar.
-LTLSPEC G((hp = 3 -> G!(hp>3)) & (hp = 2 -> G!(hp>2)) & (hp = 1 -> G!(hp>1)) & (hp = 0 -> G(hp=0))) 
+--LTLSPEC G((hp = 3 -> G!(hp>3)) & (hp = 2 -> G!(hp>2)) & (hp = 1 -> G!(hp>1)) & (hp = 0 -> G(hp=0))) 
 CTLSPEC AG((hp = 3 -> AG!(hp>3)) & (hp = 2 -> AG!(hp>2)) & (hp = 1 -> AG!(hp>1)) & (hp = 0 -> AG(hp=0)))
 
 -- 5) Uma vez que o jogador perde, ele nunca mais pode voltar a jogar. O Game Over é definitivo.
-LTLSPEC G (gamestate=lost -> G(gamestate=lost))
+--LTLSPEC G (gamestate=lost -> G(gamestate=lost))
 CTLSPEC AG (gamestate=lost -> AG(gamestate=lost))
 
 
@@ -104,15 +104,15 @@ CTLSPEC AG (!alive & hp > 0 -> AX alive)
 CTLSPEC AG (!alive  -> AX alive)
 
 -- 9) O jogador não pode levar itens após morrer.
-LTLSPEC G (!alive -> X inventory=empty)
+--LTLSPEC G (!alive -> X inventory=empty)
 CTLSPEC AG (!alive -> AX inventory=empty)
 
 -- 10) O baú deve permanecer seguro para sempre após desarmar a armadilha.
-LTLSPEC G (!trapped -> G !trapped)
+--LTLSPEC G (!trapped -> G !trapped)
 CTLSPEC AG (!trapped -> AG !trapped)
 
 -- 11) O jogador vive enquanto não abrir um bau com armadilha
-LTLSPEC (alive U (!locked & trapped)) | (G alive)
+--LTLSPEC (alive U (!locked & trapped)) | (G alive)
 
 -- 12)
 CTLSPEC EF (gamestate = solved & hp = 0)

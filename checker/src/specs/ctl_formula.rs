@@ -8,6 +8,7 @@ pub enum CtlFormula {
     And(Box<CtlFormula>, Box<CtlFormula>),
     Or(Box<CtlFormula>, Box<CtlFormula>),
     Imply(Box<CtlFormula>, Box<CtlFormula>),
+    Iff(Box<CtlFormula>, Box<CtlFormula>),
     EX(Box<CtlFormula>),
     AX(Box<CtlFormula>),
     EU(Box<CtlFormula>, Box<CtlFormula>),
@@ -21,13 +22,14 @@ pub enum CtlFormula {
 impl fmt::Display for CtlFormula {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CtlFormula::True => write!(f, "true"),
-            CtlFormula::False => write!(f, "false"),
+            CtlFormula::True => write!(f, "TRUE"),
+            CtlFormula::False => write!(f, "FALSE"),
             CtlFormula::Prop(s) => write!(f, "{}", s),
             CtlFormula::Not(phi) => write!(f, "!{}", phi),
             CtlFormula::And(phi, psi) => write!(f, "({} & {})", phi, psi),
             CtlFormula::Or(phi, psi) => write!(f, "({} | {})", phi, psi),
             CtlFormula::Imply(phi, psi) => write!(f, "({} -> {})", phi, psi),
+            CtlFormula::Iff(phi, psi) => write!(f, "({} <-> {})", phi, psi),
             CtlFormula::EX(phi) => write!(f, "EX {}", phi),
             CtlFormula::AX(phi) => write!(f, "AX {}", phi),
             CtlFormula::EF(phi) => write!(f, "EF {}", phi),
