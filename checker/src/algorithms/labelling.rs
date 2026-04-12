@@ -106,6 +106,7 @@ pub fn convert_equivalence(formula: &CtlFormula) -> CtlFormula {
             )))
         }
 
+        //Just convert equivalence of the subformulas recursively
         CtlFormula::Not(f) => CtlFormula::Not(Box::new(convert_equivalence(f))),
         CtlFormula::And(f1, f2) => CtlFormula::And(
             Box::new(convert_equivalence(f1)),
@@ -132,6 +133,14 @@ pub fn convert_equivalence(formula: &CtlFormula) -> CtlFormula {
     }
 }
 
+/// Labels the states in the Kripke structure according to the given CTL formula.
+///
+/// # Arguments
+///
+/// * `formula` - The CTL formula to label the states with.
+/// * `structure` - The Kripke structure to label the states in.
+/// * `provider` - The provider to add labels to the states.
+///
 fn label_formula(
     formula: &CtlFormula,
     structure: &KripkeStructure,
@@ -147,6 +156,9 @@ fn label_formula(
         CtlFormula::False => {
             // False is never labeled in any state
         }
+
+        // Labels all states with the property if they have the label
+        // !! (can be optimized to avoid re-computing later)
         CtlFormula::Prop(p) => {
             for state in structure.get_all_states() {
                 if let Some(labels) = structure.initial_labels.get(&state) {
@@ -156,6 +168,8 @@ fn label_formula(
                 }
             }
         }
+
+        // Just add label if the subformula is not labeled
         CtlFormula::Not(f) => {
             label_formula(f, structure, provider);
             for state in structure.get_all_states() {
@@ -164,6 +178,8 @@ fn label_formula(
                 }
             }
         }
+
+        // Add label if both subformulas are labeled
         CtlFormula::And(f1, f2) => {
             label_formula(f1, structure, provider);
             label_formula(f2, structure, provider);
@@ -173,6 +189,8 @@ fn label_formula(
                 }
             }
         }
+
+        // Add label if either subformula is labeled
         CtlFormula::Or(f1, f2) => {
             label_formula(f1, structure, provider);
             label_formula(f2, structure, provider);
@@ -182,6 +200,8 @@ fn label_formula(
                 }
             }
         }
+
+        // Add label if the first subformula is not labeled or the second is labeled
         CtlFormula::Imply(f1, f2) => {
             label_formula(f1, structure, provider);
             label_formula(f2, structure, provider);
@@ -191,6 +211,8 @@ fn label_formula(
                 }
             }
         }
+
+        // Add label if there is a neighbor that satisfies the subformula
         CtlFormula::EX(f) => {
             label_formula(f, structure, provider);
             for state in structure.get_all_states() {
@@ -204,6 +226,8 @@ fn label_formula(
                 }
             }
         }
+
+        // Add label if all neighbors satisfy the subformula
         CtlFormula::AX(f) => {
             label_formula(f, structure, provider);
             for state in structure.get_all_states() {
@@ -217,6 +241,8 @@ fn label_formula(
                 }
             }
         }
+
+        // Add label if there is a path from a state that satisfies f1 to a state that satisfies f2
         CtlFormula::EU(f1, f2) => {
             label_formula(f1, structure, provider);
             label_formula(f2, structure, provider);
@@ -231,7 +257,8 @@ fn label_formula(
                 }
             }
 
-            //For each state in the todo list, if its predecessor satisfies f1 and is not already labeled, mark it and add it to the todo list.
+            // Back-propagation: propagate backwards to predecessors satisfying f1.
+            // for each state in the todo list, if its predecessor satisfies f1 and is not already labeled, mark it and add it to the todo list.
             while let Some(state) = todo.pop() {
                 let predecessors = structure
                     .graph
@@ -246,6 +273,7 @@ fn label_formula(
             }
         }
 
+        // Add label if all paths from a state satisfy f in some future
         CtlFormula::AF(f) => {
             label_formula(f, structure, provider);
 
@@ -256,15 +284,14 @@ fn label_formula(
                 .map(|s| (s, structure.graph.neighbors(s).count()))
                 .collect();
 
-            // For each state, if it satisfies f and is not already labeled, mark it and add it to the todo list.
+            // For each state, if it satisfies f and is not already labeled, mark it (AF f) and add it to the todo list.
             for state in structure.get_all_states() {
                 if provider.is_labeled(state, f) {
                     provider.add_label(state, formula.clone());
                     todo.push(state);
                 }
             }
-
-            // For each state in the todo list, if its predecessor satisfies f and is not already labeled, mark it and add it to the todo list.
+            // Back-propagation: a predecessor satisfies AF f if ALL its successors satisfy AF f.
             while let Some(state) = todo.pop() {
                 for pred in structure
                     .graph
@@ -275,10 +302,12 @@ fn label_formula(
                     }
 
                     if let Some(count) = out_degree.get_mut(&pred) {
+                        // Decrement the out-degree of the predecessor because one successor is now labeled with AF f.
                         if *count > 0 {
                             *count -= 1;
                         }
 
+                        // If all successors are now labeled AF f, label the predecessor.
                         if *count == 0 {
                             provider.add_label(pred, formula.clone());
                             todo.push(pred);
@@ -295,6 +324,7 @@ pub fn verify(structure: &KripkeStructure, formula: &CtlFormula) -> bool {
 
     let canonical_formula = convert_equivalence(&formula);
 
+    // Initialize provider with True labels for all states
     for state in structure.get_all_states() {
         provider.add_label(state, CtlFormula::True);
     }

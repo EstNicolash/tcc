@@ -2,6 +2,7 @@ use crate::specs::ctl_formula::CtlFormula;
 use std::fmt;
 
 #[derive(Debug, Clone)]
+/// Represents an SSMV model.
 pub struct SsmvModel {
     pub name: String,
     pub variables: Vec<SsmvVariable>,
@@ -11,12 +12,14 @@ pub struct SsmvModel {
 }
 
 #[derive(Debug, Clone)]
+/// Represents a variable in an SSMV model.
 pub struct SsmvVariable {
     pub name: String,
     pub data_type: SsmvType,
 }
 
 #[derive(Debug, Clone)]
+/// Represents the type of an SSMV variable.
 pub enum SsmvType {
     Boolean,
     Enum(Vec<String>),
@@ -24,18 +27,21 @@ pub enum SsmvType {
 }
 
 #[derive(Debug, Clone)]
+/// Represents a definition in an SSMV model.
 pub struct SsmvDefine {
     pub name: String,
     pub expression: SsmvExpr,
 }
 
 #[derive(Debug, Clone)]
+/// Represents an assignment in an SSMV model.
 pub enum SsmvAssignment {
     Init(String, SsmvExpr),
     Next(String, SsmvExpr),
 }
 
 #[derive(Debug, Clone)]
+/// Represents an expression in an SSMV model.
 pub enum SsmvExpr {
     Identifier(String),
     Number(i32),

@@ -11,26 +11,39 @@ use crate::specs::ctl_formula::CtlFormula;
 #[grammar = "modeling/ssmv.pest"]
 pub struct SsmvParser;
 
+/// Convert an SSMV model string into an AST representation.
+/// # Arguments:
+/// - `input`: the SSMV model string to parse
+///
+/// # Returns:
+/// - `Ok(model)`: the parsed SSMV model
+/// - `Err(msg)`: a parse error message
 pub fn parse_ssmv(input: &str) -> Result<SsmvModel, String> {
     let mut pairs =
         SsmvParser::parse(Rule::ssmv_main, input).map_err(|e| format!("Parse error: {}", e))?;
 
     let module_main = pairs
-        .next()
-        .unwrap()
-        .into_inner()
-        .find(|p| p.as_rule() == Rule::ssmv_module_main)
-        .expect("Grammar error: ssmv_module_main not found");
+        .next() //Gives the first pair in the pairs iterator: Some(ssmv_main) or None
+        .unwrap() //Catch the first pair (ssmv_main), panicking if the iterator is empty
+        .into_inner() //Extract the inner pairs of the first pair, example: ssmv_main to [SOI, ssvm_module_main, EOI]
+        .find(|p| p.as_rule() == Rule::ssmv_module_main) //Find the ssmv_module_main pair, example: [SOI, here> ssvm_module_main <, EOI]
+        .expect("Grammar error: ssmv_module_main not found"); //Panic if not found
 
     Ok(parse_module(module_main))
 }
 
+/// Parses an SSMV module and returns an `SsmvModel`.
+/// # Arguments
+/// * `pair` - The `ssmv_module_main` pair to parse
+/// # Returns
+/// An `SsmvModel` containing the parsed module.
 fn parse_module(pair: Pair<Rule>) -> SsmvModel {
     let mut variables = vec![];
     let mut definitions = vec![];
     let mut assignments = vec![];
     let mut specifications = vec![];
 
+    // Iterate over the sections of the ssmv_module_main block and populate the model.
     for section in pair.into_inner() {
         match section.as_rule() {
             Rule::ssmv_var_section => {
@@ -73,23 +86,36 @@ fn parse_module(pair: Pair<Rule>) -> SsmvModel {
         specifications,
     }
 }
-
+/// Parses an SSMV variable declaration and returns an `SsmvVariable`.
+///
+/// A variable declaration is something like `x: int;`, `locked: boolean;`, `hp: 0..3;` and `inventory: {key, treasure};`.
+///
+/// # Arguments
+/// * `pair` - The `ssmv_var_decl` pair to parse
+/// # Returns
+/// An `SsmvVariable` containing the parsed variable declaration.
 fn parse_var_decl(pair: Pair<Rule>) -> SsmvVariable {
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner(); // ssmv_var_decl to [ssmv_ident, ssmv_var_type]
     let name = inner.next().unwrap().as_str().to_string();
     let data_type = parse_var_type(inner.next().unwrap());
     SsmvVariable { name, data_type }
 }
 
+/// Parses an SSMV variable type and returns an `SsmvType`.
+/// # Arguments
+/// * `pair` - The `ssmv_var_type` pair to parse
+/// # Returns
+/// An `SsmvType` containing the parsed variable type.
 fn parse_var_type(pair: Pair<Rule>) -> SsmvType {
     // boolean is a literal — no child. ssmv_enum_type and ssmv_range_type generate.
     match pair.into_inner().next() {
         None => SsmvType::Boolean,
         Some(inner) => match inner.as_rule() {
             Rule::ssmv_enum_type => {
-                let values = inner.into_inner().map(|p| p.as_str().to_string()).collect();
+                let values = inner.into_inner().map(|p| p.as_str().to_string()).collect(); // Create a vector of the defined enum values as strings
                 SsmvType::Enum(values)
             }
+
             Rule::ssmv_range_type => {
                 let mut nums = inner.into_inner();
                 let lo = nums.next().unwrap().as_str().parse::<i32>().unwrap();
@@ -108,12 +134,21 @@ fn parse_define_decl(pair: Pair<Rule>) -> SsmvDefine {
     SsmvDefine { name, expression }
 }
 
+/// Parses an SSMV assignment and returns an `SsmvAssignment`.
+///
+/// An assignment can be either an `Init` or a `Next` assignment like `init(gamestate) := running;` or `next(gamestate) := running;`.
+///
+/// # Arguments
+/// * `pair` - The `ssmv_assign` pair to parse
+/// # Returns
+/// An `SsmvAssignment` containing the parsed assignment.
 fn parse_assignment(pair: Pair<Rule>) -> SsmvAssignment {
     let inner = pair.into_inner().next().unwrap();
+
     match inner.as_rule() {
         Rule::ssmv_init_assign => {
             let mut sub = inner.into_inner();
-            let name = sub.next().unwrap().as_str().to_string();
+            let name = sub.next().unwrap().as_str().to_string(); // Extract the variable name as a string
             let expr = parse_expr(sub.next().unwrap());
             SsmvAssignment::Init(name, expr)
         }
@@ -126,10 +161,15 @@ fn parse_assignment(pair: Pair<Rule>) -> SsmvAssignment {
         _ => unreachable!("Unexpected assignment rule: {:?}", inner.as_rule()),
     }
 }
-
+/// Parses an SSMV expression and returns an `SsmvExpr`.
+///
+/// # Arguments
+/// * `pair` - The `ssmv_expression` or other expression pair to parse
+/// # Returns
+/// An `SsmvExpr` containing the parsed expression.
 fn parse_expr(pair: Pair<Rule>) -> SsmvExpr {
     match pair.as_rule() {
-        Rule::ssmv_expression => parse_expr(pair.into_inner().next().unwrap()),
+        Rule::ssmv_expression => parse_expr(pair.into_inner().next().unwrap()), // Recursively parse the inner expression ("discarting the first outer pair")
 
         Rule::ssmv_implication => parse_left_binary(pair, "->"),
         Rule::ssmv_logical_or => parse_binary_with_op(pair),
@@ -145,7 +185,6 @@ fn parse_expr(pair: Pair<Rule>) -> SsmvExpr {
     }
 }
 
-/// Para ssmv_implication: operador é sempre "->" (literal, não aparece como Pair)
 /// For ssmv_implication: operator is always "->" (literal, not a Pair)
 fn parse_left_binary(pair: Pair<Rule>, op: &str) -> SsmvExpr {
     let mut inner = pair.into_inner();
@@ -170,6 +209,7 @@ fn parse_binary_with_op(pair: Pair<Rule>) -> SsmvExpr {
     left
 }
 
+/// For unary expressions, parses the operator and operand and returns an `SsmvExpr`.
 fn parse_unary(pair: Pair<Rule>) -> SsmvExpr {
     let mut inner = pair.into_inner();
     let first = inner.next().unwrap();
@@ -185,6 +225,9 @@ fn parse_unary(pair: Pair<Rule>) -> SsmvExpr {
     }
 }
 
+/// For primary expressions, parses the inner expression and returns an `SsmvExpr`.
+///
+/// A primary expression is either a number, boolean, identifier, set constant, a case expression, or a parenthesized expression.
 fn parse_primary(pair: Pair<Rule>) -> SsmvExpr {
     let inner = match pair.as_rule() {
         Rule::ssmv_primary => pair.into_inner().next().unwrap(),
@@ -196,6 +239,7 @@ fn parse_primary(pair: Pair<Rule>) -> SsmvExpr {
         Rule::ssmv_boolean_const => SsmvExpr::Bool(inner.as_str() == "TRUE"),
         Rule::ssmv_ident => SsmvExpr::Identifier(inner.as_str().to_string()),
         Rule::ssmv_set_const => {
+            // Recursively parse each element of the set constant and collect them into a vector
             let elements = inner.into_inner().map(|p| parse_primary_from(p)).collect();
             SsmvExpr::Set(elements)
         }
@@ -218,7 +262,7 @@ fn parse_primary(pair: Pair<Rule>) -> SsmvExpr {
     }
 }
 
-/// Versão de parse_primary que aceita qualquer regra de expressão (usada em Set)
+/// Version of `parse_primary` that accepts any rule of expression (used in Set)
 fn parse_primary_from(pair: Pair<Rule>) -> SsmvExpr {
     match pair.as_rule() {
         Rule::ssmv_primary => parse_primary(pair),
@@ -226,6 +270,7 @@ fn parse_primary_from(pair: Pair<Rule>) -> SsmvExpr {
     }
 }
 
+/// For CTL expressions, parses the operator and operands and returns a `CtlFormula`.
 fn parse_ctl(pair: Pair<Rule>) -> CtlFormula {
     match pair.as_rule() {
         Rule::formula | Rule::implication | Rule::iff | Rule::or | Rule::and => {

@@ -1,5 +1,4 @@
 // ctl.pest
-// CTL formula grammar — merged into ssmv_complete_grammar.pest at build time
 
 WHITESPACE = _ { " " | "\t" | "\r" | "\n" }
 
