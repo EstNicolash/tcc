@@ -158,10 +158,16 @@ pub fn build_model(ast: SsmvModel) -> Model {
 
     for (idx, var) in variables.iter().enumerate() {
         if !vars_com_init.contains(&idx) {
-            panic!("Variable {} not found in init_assignments", var.name);
+            eprintln!(
+                "Warning: variable '{}' has no init — will be non-deterministic",
+                var.name
+            );
         }
         if !vars_com_next.contains(&idx) {
-            panic!("Variable {} not found in next_assignments", var.name);
+            eprintln!(
+                "Warning: variable '{}' has no next — will keep current value",
+                var.name
+            );
         }
     }
 
