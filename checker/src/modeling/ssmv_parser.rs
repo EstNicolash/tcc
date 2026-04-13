@@ -335,7 +335,14 @@ fn parse_ctl(pair: Pair<Rule>) -> CtlFormula {
                     "false" => CtlFormula::False,
                     _ => unreachable!(),
                 },
-                Rule::proposition => CtlFormula::Prop(inner.as_str().to_string()),
+                Rule::proposition => {
+                    let normalized: String = inner
+                        .as_str()
+                        .chars()
+                        .filter(|c| !c.is_whitespace())
+                        .collect();
+                    CtlFormula::Prop(normalized)
+                }
                 _ => unreachable!("Unexpected primary: {:?}", inner.as_rule()),
             }
         }
