@@ -29,7 +29,6 @@ fn main() {
         }
     }
 }
-
 fn run_verification(
     model_path: String,
     spec_path: String,
@@ -41,6 +40,8 @@ fn run_verification(
         format!("--- Model Checker (Verify): {} ---", model_path.bold()).blue()
     );
 
+    let mut formulas = vec![];
+
     let model = match format {
         InputFormat::Pnml => {
             let fsm_path = model_path.replace(".pnml", ".fsm");
@@ -50,22 +51,28 @@ fn run_verification(
             let fsm_path = model_path.replace(".prism", ".fsm");
             io::load_prism_fsm::load_prism_fsm(&fsm_path, &model_path)
         }
+        InputFormat::Ssmv => fs::read_to_string(&model_path)
+            .map_err(|e| format!("Failed to read file: {}", e))
+            .and_then(|content| modeling::ssmv_parser::parse_ssmv(&content))
+            .map(|ast| {
+                let symbolic_model = modeling::symbolic::build_model(ast);
 
-        InputFormat::Ssmv => {
-            unimplemented!(
-                "Ssmv expansion to Kripke structure is not yet integrated into the Verify flow."
-            );
-        }
+                formulas.extend(symbolic_model.specs.clone());
+
+                modeling::expansion::expand_to_kripke(&symbolic_model)
+            }),
     }
     .unwrap_or_else(|e| {
         eprintln!("{} {}", "Error loading model:".red().bold(), e);
         process::exit(1);
     });
 
-    let formulas = io::load_formulas::load_formulas(&spec_path).unwrap_or_else(|e| {
-        eprintln!("{} {}", "Error loading formulas:".red().bold(), e);
-        process::exit(1);
-    });
+    if formulas.is_empty() {
+        formulas = io::load_formulas::load_formulas(&spec_path).unwrap_or_else(|e| {
+            eprintln!("{} {}", "Error loading formulas:".red().bold(), e);
+            process::exit(1);
+        });
+    }
 
     println!(
         "{} Model loaded via {:?} ({} states). {} formulas found.\n",

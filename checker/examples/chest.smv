@@ -7,7 +7,7 @@ VAR
 	action: {idle, pick_up, use_item};
 	hp: 0..3;
 	gamestate: {running, solved, lost};
-	
+
 ASSIGN
 	init(gamestate) := running;
 	init(hp) := 3;
@@ -15,6 +15,7 @@ ASSIGN
 	init(trapped) := TRUE;
 	init(inventory) := empty;
 	init(alive) := TRUE;
+	init(action) := idle;
 
 	next(gamestate) :=
 		case
@@ -65,9 +66,9 @@ ASSIGN
 
 -- FAIRNESS action != idle;
 -- FAIRNESS gamestate != running;
-		
-		 
-			
+
+
+
 -- 1) Se o jogador abrir o baú enquanto a armadilha estiver ativa ele tem que morrer.
 --LTLSPEC G (alive & !locked & trapped -> X(!alive))
 CTLSPEC AG (alive & !locked & trapped -> AX(!alive))
@@ -81,7 +82,7 @@ CTLSPEC AG (!alive -> AX(locked))
 CTLSPEC !EF(inventory = treasure & locked)
 
 -- 4) O HP nunca pode aumentar.
---LTLSPEC G((hp = 3 -> G!(hp>3)) & (hp = 2 -> G!(hp>2)) & (hp = 1 -> G!(hp>1)) & (hp = 0 -> G(hp=0))) 
+--LTLSPEC G((hp = 3 -> G!(hp>3)) & (hp = 2 -> G!(hp>2)) & (hp = 1 -> G!(hp>1)) & (hp = 0 -> G(hp=0)))
 CTLSPEC AG((hp = 3 -> AG!(hp>3)) & (hp = 2 -> AG!(hp>2)) & (hp = 1 -> AG!(hp>1)) & (hp = 0 -> AG(hp=0)))
 
 -- 5) Uma vez que o jogador perde, ele nunca mais pode voltar a jogar. O Game Over é definitivo.
