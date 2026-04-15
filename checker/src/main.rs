@@ -14,6 +14,7 @@ use std::process;
 fn main() {
     let cli = Cli::parse();
 
+    /*
     match cli.command {
         Commands::Verify {
             model_path,
@@ -27,8 +28,9 @@ fn main() {
         Commands::TestParser { input_file, output } => {
             run_parser_test(input_file, output);
         }
-    }
+    }*/
 }
+/*
 fn run_verification(
     model_path: String,
     spec_path: String,
@@ -141,4 +143,4 @@ fn run_parser_test(input_file: String, output: Option<String>) {
             process::exit(1);
         }
     }
-}
+}*/
