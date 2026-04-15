@@ -164,7 +164,7 @@ impl CtlFormulaArena {
             ),
             CtlFormula::Not(f_id) => format!("!{}", self.format_formula(*f_id)),
             CtlFormula::Imply(f1_id, f2_id) => format!(
-                "({} => {})",
+                "({} -> {})",
                 self.format_formula(*f1_id),
                 self.format_formula(*f2_id)
             ),

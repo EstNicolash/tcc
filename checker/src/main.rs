@@ -14,7 +14,6 @@ use std::process;
 fn main() {
     let cli = Cli::parse();
 
-    /*
     match cli.command {
         Commands::Verify {
             model_path,
@@ -22,13 +21,13 @@ fn main() {
             format,
             algorithm,
         } => {
-            run_verification(model_path, spec_path, format, algorithm);
+            //run_verification(model_path, spec_path, format, algorithm);
         }
 
         Commands::TestParser { input_file, output } => {
             run_parser_test(input_file, output);
         }
-    }*/
+    }
 }
 /*
 fn run_verification(
@@ -104,7 +103,7 @@ fn run_verification(
         );
     }
 }
-
+*/
 fn run_parser_test(input_file: String, output: Option<String>) {
     println!("{}", "--- Mode: SSMV Parser Test ---".yellow().bold());
 
@@ -120,7 +119,7 @@ fn run_parser_test(input_file: String, output: Option<String>) {
 
     match modeling::ssmv_parser::parse_ssmv(&input_content) {
         Ok(model) => {
-            let result = format!("{}", model);
+            let result = model.format();
 
             if let Some(out_path) = output {
                 fs::write(&out_path, &result).unwrap_or_else(|e| {
@@ -143,4 +142,4 @@ fn run_parser_test(input_file: String, output: Option<String>) {
             process::exit(1);
         }
     }
-}*/
+}

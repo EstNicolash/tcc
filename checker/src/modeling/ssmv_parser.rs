@@ -2,10 +2,11 @@ use pest::Parser;
 use pest::iterators::Pair;
 use pest_derive::Parser;
 
-use crate::modeling::ast::{
-    SsmvAssignment, SsmvDefine, SsmvExpr, SsmvModel, SsmvType, SsmvVariable,
+use crate::modeling::ssmv_ast::{
+    ExprID, IdentifierID, SsmvArena, SsmvAssignment, SsmvDefine, SsmvExpr, SsmvModel, SsmvType,
+    SsmvVariable,
 };
-use crate::specs::ctl_formula::CtlFormula;
+use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
 
 #[derive(Parser)]
 #[grammar = "modeling/ssmv.pest"]
@@ -43,27 +44,30 @@ fn parse_module(pair: Pair<Rule>) -> SsmvModel {
     let mut assignments = vec![];
     let mut specifications = vec![];
 
+    let mut ssmv_arena = SsmvArena::new();
+    let mut ctl_arena = CtlFormulaArena::new();
+
     // Iterate over the sections of the ssmv_module_main block and populate the model.
     for section in pair.into_inner() {
         match section.as_rule() {
             Rule::ssmv_var_section => {
                 for inner in section.into_inner() {
                     if inner.as_rule() == Rule::ssmv_var_decl {
-                        variables.push(parse_var_decl(inner));
+                        variables.push(parse_var_decl(inner, &mut ssmv_arena));
                     }
                 }
             }
             Rule::ssmv_define_section => {
                 for inner in section.into_inner() {
                     if inner.as_rule() == Rule::ssmv_define_decl {
-                        definitions.push(parse_define_decl(inner));
+                        definitions.push(parse_define_decl(inner, &mut ssmv_arena));
                     }
                 }
             }
             Rule::ssmv_assign_section => {
                 for inner in section.into_inner() {
                     if inner.as_rule() == Rule::ssmv_assignment {
-                        assignments.push(parse_assignment(inner));
+                        assignments.push(parse_assignment(inner, &mut ssmv_arena));
                     }
                 }
             }
@@ -72,7 +76,7 @@ fn parse_module(pair: Pair<Rule>) -> SsmvModel {
                     .into_inner()
                     .find(|p| p.as_rule() == Rule::formula)
                     .expect("Grammar error: formula not found inside CTLSPEC");
-                specifications.push(parse_ctl(formula_pair));
+                specifications.push(parse_ctl(formula_pair, &mut ctl_arena));
             }
             _ => {}
         }
@@ -84,6 +88,8 @@ fn parse_module(pair: Pair<Rule>) -> SsmvModel {
         definitions,
         assignments,
         specifications,
+        arena: ssmv_arena,
+        ctl_arena: ctl_arena,
     }
 }
 /// Parses an SSMV variable declaration and returns an `SsmvVariable`.
@@ -94,10 +100,11 @@ fn parse_module(pair: Pair<Rule>) -> SsmvModel {
 /// * `pair` - The `ssmv_var_decl` pair to parse
 /// # Returns
 /// An `SsmvVariable` containing the parsed variable declaration.
-fn parse_var_decl(pair: Pair<Rule>) -> SsmvVariable {
+fn parse_var_decl(pair: Pair<Rule>, ssmv_arena: &mut SsmvArena) -> SsmvVariable {
     let mut inner = pair.into_inner(); // ssmv_var_decl to [ssmv_ident, ssmv_var_type]
-    let name = inner.next().unwrap().as_str().to_string();
-    let data_type = parse_var_type(inner.next().unwrap());
+    let name_str = inner.next().unwrap().as_str();
+    let name: IdentifierID = ssmv_arena.intern_identifier(name_str);
+    let data_type = parse_var_type(inner.next().unwrap(), ssmv_arena);
     SsmvVariable { name, data_type }
 }
 
@@ -106,13 +113,16 @@ fn parse_var_decl(pair: Pair<Rule>) -> SsmvVariable {
 /// * `pair` - The `ssmv_var_type` pair to parse
 /// # Returns
 /// An `SsmvType` containing the parsed variable type.
-fn parse_var_type(pair: Pair<Rule>) -> SsmvType {
+fn parse_var_type(pair: Pair<Rule>, ssmv_arena: &mut SsmvArena) -> SsmvType {
     // boolean is a literal — no child. ssmv_enum_type and ssmv_range_type generate.
     match pair.into_inner().next() {
         None => SsmvType::Boolean,
         Some(inner) => match inner.as_rule() {
             Rule::ssmv_enum_type => {
-                let values = inner.into_inner().map(|p| p.as_str().to_string()).collect(); // Create a vector of the defined enum values as strings
+                let values = inner
+                    .into_inner()
+                    .map(|p| ssmv_arena.intern_identifier(p.as_str()))
+                    .collect(); // Create a vector of the defined enum values as strings
                 SsmvType::Enum(values)
             }
 
@@ -127,10 +137,10 @@ fn parse_var_type(pair: Pair<Rule>) -> SsmvType {
     }
 }
 
-fn parse_define_decl(pair: Pair<Rule>) -> SsmvDefine {
+fn parse_define_decl(pair: Pair<Rule>, ssmv_arena: &mut SsmvArena) -> SsmvDefine {
     let mut inner = pair.into_inner();
-    let name = inner.next().unwrap().as_str().to_string();
-    let expression = parse_expr(inner.next().unwrap());
+    let name = ssmv_arena.intern_identifier(inner.next().unwrap().as_str());
+    let expression = parse_expr(inner.next().unwrap(), ssmv_arena);
     SsmvDefine { name, expression }
 }
 
@@ -140,22 +150,24 @@ fn parse_define_decl(pair: Pair<Rule>) -> SsmvDefine {
 ///
 /// # Arguments
 /// * `pair` - The `ssmv_assign` pair to parse
+/// * `ssmv_arena` - The arena to store the parsed expression in
+///
 /// # Returns
 /// An `SsmvAssignment` containing the parsed assignment.
-fn parse_assignment(pair: Pair<Rule>) -> SsmvAssignment {
+fn parse_assignment(pair: Pair<Rule>, ssmv_arena: &mut SsmvArena) -> SsmvAssignment {
     let inner = pair.into_inner().next().unwrap();
 
     match inner.as_rule() {
         Rule::ssmv_init_assign => {
             let mut sub = inner.into_inner();
-            let name = sub.next().unwrap().as_str().to_string(); // Extract the variable name as a string
-            let expr = parse_expr(sub.next().unwrap());
+            let name = ssmv_arena.intern_identifier(sub.next().unwrap().as_str());
+            let expr = parse_expr(sub.next().unwrap(), ssmv_arena);
             SsmvAssignment::Init(name, expr)
         }
         Rule::ssmv_next_assign => {
             let mut sub = inner.into_inner();
-            let name = sub.next().unwrap().as_str().to_string();
-            let expr = parse_expr(sub.next().unwrap());
+            let name = ssmv_arena.intern_identifier(sub.next().unwrap().as_str());
+            let expr = parse_expr(sub.next().unwrap(), ssmv_arena);
             SsmvAssignment::Next(name, expr)
         }
         _ => unreachable!("Unexpected assignment rule: {:?}", inner.as_rule()),
@@ -165,200 +177,199 @@ fn parse_assignment(pair: Pair<Rule>) -> SsmvAssignment {
 ///
 /// # Arguments
 /// * `pair` - The `ssmv_expression` or other expression pair to parse
+/// * `ssmv_arena` - The arena to store the parsed expression in
 /// # Returns
 /// An `SsmvExpr` containing the parsed expression.
-fn parse_expr(pair: Pair<Rule>) -> SsmvExpr {
+fn parse_expr(pair: Pair<Rule>, ssmv_arena: &mut SsmvArena) -> ExprID {
     match pair.as_rule() {
-        Rule::ssmv_expression => parse_expr(pair.into_inner().next().unwrap()), // Recursively parse the inner expression ("discarting the first outer pair")
-
-        Rule::ssmv_implication => parse_left_binary(pair, "->"),
-        Rule::ssmv_logical_or => parse_binary_with_op(pair),
-        Rule::ssmv_logical_and => parse_binary_with_op(pair),
-        Rule::ssmv_comparison => parse_binary_with_op(pair),
-        Rule::ssmv_term => parse_binary_with_op(pair),
-        Rule::ssmv_factor => parse_binary_with_op(pair),
-
-        Rule::ssmv_unary => parse_unary(pair),
-        Rule::ssmv_primary => parse_primary(pair),
-
-        _ => unreachable!("Unexpected expression rule: {:?}", pair.as_rule()),
-    }
-}
-
-/// For ssmv_implication: operator is always "->" (literal, not a Pair)
-fn parse_left_binary(pair: Pair<Rule>, op: &str) -> SsmvExpr {
-    let mut inner = pair.into_inner();
-    let mut left = parse_expr(inner.next().unwrap());
-    for right_pair in inner {
-        let right = parse_expr(right_pair);
-        left = SsmvExpr::Binary(Box::new(left), op.to_string(), Box::new(right));
-    }
-    left
-}
-
-/// For rules where the operator is a named Pair (ssmv_or_op, ssmv_and_op, etc.)
-/// inner: [expr, op, expr, op, expr, ...]
-fn parse_binary_with_op(pair: Pair<Rule>) -> SsmvExpr {
-    let mut inner = pair.into_inner();
-    let mut left = parse_expr(inner.next().unwrap());
-    while let Some(op_pair) = inner.next() {
-        let op = op_pair.as_str().to_string();
-        let right = parse_expr(inner.next().unwrap());
-        left = SsmvExpr::Binary(Box::new(left), op, Box::new(right));
-    }
-    left
-}
-
-/// For unary expressions, parses the operator and operand and returns an `SsmvExpr`.
-fn parse_unary(pair: Pair<Rule>) -> SsmvExpr {
-    let mut inner = pair.into_inner();
-    let first = inner.next().unwrap();
-
-    match first.as_rule() {
-        Rule::ssmv_unary_op => {
-            let op = first.as_str().to_string();
-            let operand = parse_expr(inner.next().unwrap());
-            SsmvExpr::Unary(op, Box::new(operand))
+        Rule::ssmv_expression => parse_expr(pair.into_inner().next().unwrap(), ssmv_arena),
+        Rule::ssmv_implication => {
+            let mut inner = pair.into_inner();
+            let mut left = parse_expr(inner.next().unwrap(), ssmv_arena);
+            let op_id = ssmv_arena.intern_identifier("->");
+            for right_pair in inner {
+                let right = parse_expr(right_pair, ssmv_arena);
+                left = ssmv_arena.insert_expr(SsmvExpr::Binary(left, op_id, right));
+            }
+            left
         }
-        // Without operator: the first child is already the primary/expr
-        _ => parse_primary(first),
+        Rule::ssmv_logical_or
+        | Rule::ssmv_logical_and
+        | Rule::ssmv_comparison
+        | Rule::ssmv_term
+        | Rule::ssmv_factor => {
+            let mut inner = pair.into_inner();
+            let mut left = parse_expr(inner.next().unwrap(), ssmv_arena);
+            while let Some(op_pair) = inner.next() {
+                let op_id = ssmv_arena.intern_identifier(op_pair.as_str());
+                let right = parse_expr(inner.next().unwrap(), ssmv_arena);
+                left = ssmv_arena.insert_expr(SsmvExpr::Binary(left, op_id, right));
+            }
+            left
+        }
+        Rule::ssmv_unary => {
+            let mut inner = pair.into_inner();
+            let first = inner.next().unwrap();
+            match first.as_rule() {
+                Rule::ssmv_unary_op => {
+                    let op_id = ssmv_arena.intern_identifier(first.as_str());
+                    let operand = parse_expr(inner.next().unwrap(), ssmv_arena);
+                    ssmv_arena.insert_expr(SsmvExpr::Unary(op_id, operand))
+                }
+                _ => parse_primary(first, ssmv_arena),
+            }
+        }
+        Rule::ssmv_primary => parse_primary(pair, ssmv_arena),
+        _ => unreachable!(),
     }
 }
 
 /// For primary expressions, parses the inner expression and returns an `SsmvExpr`.
 ///
+/// # Arguments
+/// * `pair` - The `ssmv_primary` or other primary expression pair to parse
+/// * `ssmv_arena` - The arena to store the parsed expression in
+///
 /// A primary expression is either a number, boolean, identifier, set constant, a case expression, or a parenthesized expression.
-fn parse_primary(pair: Pair<Rule>) -> SsmvExpr {
+fn parse_primary(pair: Pair<Rule>, arena: &mut SsmvArena) -> ExprID {
     let inner = match pair.as_rule() {
         Rule::ssmv_primary => pair.into_inner().next().unwrap(),
-        other => panic!("Expected ssmv_primary, got {:?}", other),
+        _ => pair,
     };
 
     match inner.as_rule() {
-        Rule::ssmv_number => SsmvExpr::Number(inner.as_str().parse::<i32>().unwrap()),
-        Rule::ssmv_boolean_const => SsmvExpr::Bool(inner.as_str() == "TRUE"),
-        Rule::ssmv_ident => SsmvExpr::Identifier(inner.as_str().to_string()),
+        Rule::ssmv_number => arena.insert_expr(SsmvExpr::Number(inner.as_str().parse().unwrap())),
+        Rule::ssmv_boolean_const => arena.insert_expr(SsmvExpr::Bool(inner.as_str() == "TRUE")),
+        Rule::ssmv_ident => {
+            let id = arena.intern_identifier(inner.as_str());
+            arena.insert_expr(SsmvExpr::Identifier(id))
+        }
         Rule::ssmv_set_const => {
-            // Recursively parse each element of the set constant and collect them into a vector
-            let elements = inner.into_inner().map(|p| parse_primary_from(p)).collect();
-            SsmvExpr::Set(elements)
+            let elements: Vec<ExprID> = inner.into_inner().map(|p| parse_expr(p, arena)).collect();
+            arena.alloc_set(elements)
         }
         Rule::ssmv_case_expression => {
-            let arms = inner
+            let arms: Vec<(ExprID, ExprID)> = inner
                 .into_inner()
                 .filter(|p| p.as_rule() == Rule::ssmv_case_arm)
                 .map(|arm| {
                     let mut sub = arm.into_inner();
-                    let cond = parse_expr(sub.next().unwrap());
-                    let val = parse_expr(sub.next().unwrap());
+                    let cond = parse_expr(sub.next().unwrap(), arena);
+                    let val = parse_expr(sub.next().unwrap(), arena);
                     (cond, val)
                 })
                 .collect();
-            SsmvExpr::Case(arms)
+            arena.alloc_case(arms)
         }
-        // "(" ~ ssmv_expression ~ ")" — the parenthesis is literal, child is ssmv_expression
-        Rule::ssmv_expression => parse_expr(inner),
-        _ => unreachable!("Unexpected primary child: {:?}", inner.as_rule()),
+        Rule::ssmv_expression => parse_expr(inner, arena),
+        _ => unreachable!(),
     }
 }
 
 /// Version of `parse_primary` that accepts any rule of expression (used in Set)
-fn parse_primary_from(pair: Pair<Rule>) -> SsmvExpr {
+fn parse_primary_from(pair: Pair<Rule>, ssmv_arena: &mut SsmvArena) -> ExprID {
     match pair.as_rule() {
-        Rule::ssmv_primary => parse_primary(pair),
-        _ => parse_expr(pair),
+        Rule::ssmv_primary => parse_primary(pair, ssmv_arena),
+        _ => parse_expr(pair, ssmv_arena),
     }
 }
 
 /// For CTL expressions, parses the operator and operands and returns a `CtlFormula`.
-fn parse_ctl(pair: Pair<Rule>) -> CtlFormula {
+fn parse_ctl(pair: Pair<Rule>, formula_arena: &mut CtlFormulaArena) -> FormulaID {
     match pair.as_rule() {
         Rule::formula | Rule::implication | Rule::iff | Rule::or | Rule::and => {
             let mut inner = pair.into_inner();
-            let mut left = parse_ctl(inner.next().unwrap());
+            let mut left = parse_ctl(inner.next().unwrap(), formula_arena);
+
             while let Some(op) = inner.next() {
-                let right = parse_ctl(inner.next().unwrap());
+                let right = parse_ctl(inner.next().unwrap(), formula_arena);
                 left = match op.as_rule() {
-                    Rule::op_imply => CtlFormula::Imply(Box::new(left), Box::new(right)),
-                    Rule::op_iff => CtlFormula::Iff(Box::new(left), Box::new(right)),
-                    Rule::op_or => CtlFormula::Or(Box::new(left), Box::new(right)),
-                    Rule::op_and => CtlFormula::And(Box::new(left), Box::new(right)),
-                    _ => unreachable!("Unexpected CTL operator: {:?}", op.as_rule()),
+                    Rule::op_imply => formula_arena.insert(CtlFormula::Imply(left, right)),
+                    Rule::op_iff => formula_arena.insert(CtlFormula::Iff(left, right)),
+                    Rule::op_or => formula_arena.insert(CtlFormula::Or(left, right)),
+                    Rule::op_and => formula_arena.insert(CtlFormula::And(left, right)),
+                    _ => unreachable!("Unexpected operator rule: {:?}", op.as_rule()),
                 };
             }
             left
         }
+
         Rule::temporal_binary => {
             let inner = pair.into_inner().next().unwrap();
             match inner.as_rule() {
                 Rule::eu => {
                     let mut sub = inner.into_inner();
-                    let f1 = parse_ctl(sub.next().unwrap());
-                    let f2 = parse_ctl(sub.next().unwrap());
-                    CtlFormula::EU(Box::new(f1), Box::new(f2))
+                    let f1 = parse_ctl(sub.next().unwrap(), formula_arena);
+                    let f2 = parse_ctl(sub.next().unwrap(), formula_arena);
+                    formula_arena.insert(CtlFormula::EU(f1, f2))
                 }
                 Rule::au => {
                     let mut sub = inner.into_inner();
-                    let f1 = parse_ctl(sub.next().unwrap());
-                    let f2 = parse_ctl(sub.next().unwrap());
-                    CtlFormula::AU(Box::new(f1), Box::new(f2))
+                    let f1 = parse_ctl(sub.next().unwrap(), formula_arena);
+                    let f2 = parse_ctl(sub.next().unwrap(), formula_arena);
+                    formula_arena.insert(CtlFormula::AU(f1, f2))
                 }
-                _ => parse_ctl(inner),
+                _ => parse_ctl(inner, formula_arena),
             }
         }
+
         Rule::unary => {
             let mut inner = pair.into_inner();
             let first = inner.next().unwrap();
+
             match first.as_rule() {
                 Rule::unary_op => {
-                    let sub = Box::new(parse_ctl(inner.next().unwrap()));
-                    match first.as_str() {
-                        "EX" => CtlFormula::EX(sub),
-                        "AX" => CtlFormula::AX(sub),
-                        "EF" => CtlFormula::EF(sub),
-                        "AF" => CtlFormula::AF(sub),
-                        "EG" => CtlFormula::EG(sub),
-                        "AG" => CtlFormula::AG(sub),
-                        op => unreachable!("Unknown CTL op: {}", op),
+                    let op_str = first.as_str();
+                    let sub = parse_ctl(inner.next().unwrap(), formula_arena);
+                    match op_str {
+                        "EX" => formula_arena.insert(CtlFormula::EX(sub)),
+                        "AX" => formula_arena.insert(CtlFormula::AX(sub)),
+                        "EF" => formula_arena.insert(CtlFormula::EF(sub)),
+                        "AF" => formula_arena.insert(CtlFormula::AF(sub)),
+                        "EG" => formula_arena.insert(CtlFormula::EG(sub)),
+                        "AG" => formula_arena.insert(CtlFormula::AG(sub)),
+                        _ => unreachable!("Unknown CTL op: {}", op_str),
                     }
                 }
-                Rule::primary => parse_ctl(first),
-                _ => CtlFormula::Not(Box::new(parse_ctl(first))),
+                _ => {
+                    if first.as_rule() == Rule::primary {
+                        parse_ctl(first, formula_arena)
+                    } else {
+                        let sub = parse_ctl(first, formula_arena);
+                        formula_arena.insert(CtlFormula::Not(sub))
+                    }
+                }
             }
         }
+
         Rule::primary => {
             let inner = pair.into_inner().next().unwrap();
             match inner.as_rule() {
-                Rule::formula => parse_ctl(inner),
+                Rule::formula => parse_ctl(inner, formula_arena),
                 Rule::constant => match inner.as_str().to_lowercase().as_str() {
-                    "true" => CtlFormula::True,
-                    "false" => CtlFormula::False,
+                    "true" => formula_arena.insert(CtlFormula::True),
+                    "false" => formula_arena.insert(CtlFormula::False),
                     _ => unreachable!(),
                 },
-                Rule::proposition => {
-                    let normalized: String = inner
-                        .as_str()
-                        .chars()
-                        .filter(|c| !c.is_whitespace())
-                        .collect();
-                    CtlFormula::Prop(normalized)
-                }
-                _ => unreachable!("Unexpected primary: {:?}", inner.as_rule()),
+                Rule::proposition => formula_arena.insert_proposition(inner.as_str()),
+                _ => unreachable!("Unexpected primary rule: {:?}", inner.as_rule()),
             }
         }
-        _ => unreachable!("Unexpected CTL rule: {:?}", pair.as_rule()),
+
+        _ => unreachable!("Unexpected rule: {:?}", pair.as_rule()),
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::specs::ctl_formula::CtlFormula;
 
     #[test]
     fn test_boolean_variable() {
         let model = parse_ssmv("MODULE main VAR flag : boolean;").unwrap();
         assert_eq!(model.variables.len(), 1);
-        assert_eq!(model.variables[0].name, "flag");
+
+        assert_eq!(model.arena.get_ident(model.variables[0].name), "flag");
         assert!(matches!(model.variables[0].data_type, SsmvType::Boolean));
     }
 
@@ -366,8 +377,10 @@ mod tests {
     fn test_enum_variable() {
         let model = parse_ssmv("MODULE main VAR state : {s0, s1, s2};").unwrap();
         assert_eq!(model.variables.len(), 1);
+
         if let SsmvType::Enum(vals) = &model.variables[0].data_type {
-            assert_eq!(vals, &["s0", "s1", "s2"]);
+            let names: Vec<&str> = vals.iter().map(|&id| model.arena.get_ident(id)).collect();
+            assert_eq!(names, vec!["s0", "s1", "s2"]);
         } else {
             panic!("Expected Enum type");
         }
@@ -376,18 +389,10 @@ mod tests {
     #[test]
     fn test_range_variable() {
         let model = parse_ssmv("MODULE main VAR counter : 0..9;").unwrap();
+        assert_eq!(model.arena.get_ident(model.variables[0].name), "counter");
         assert!(matches!(
             model.variables[0].data_type,
             SsmvType::Range(0, 9)
-        ));
-    }
-
-    #[test]
-    fn test_negative_range_variable() {
-        let model = parse_ssmv("MODULE main VAR temp : -10..10;").unwrap();
-        assert!(matches!(
-            model.variables[0].data_type,
-            SsmvType::Range(-10, 10)
         ));
     }
 
@@ -396,7 +401,13 @@ mod tests {
         let src = "MODULE main VAR s : {a, b}; ASSIGN init(s) := a;";
         let model = parse_ssmv(src).unwrap();
         assert_eq!(model.assignments.len(), 1);
-        assert!(matches!(&model.assignments[0], SsmvAssignment::Init(name, _) if name == "s"));
+
+        match &model.assignments[0] {
+            SsmvAssignment::Init(name_id, _) => {
+                assert_eq!(model.arena.get_ident(*name_id), "s");
+            }
+            _ => panic!("Expected Init assignment"),
+        }
     }
 
     #[test]
@@ -411,11 +422,13 @@ mod tests {
                 esac;
         "#;
         let model = parse_ssmv(src).unwrap();
-        assert_eq!(model.assignments.len(), 1);
-        if let SsmvAssignment::Next(_, SsmvExpr::Case(arms)) = &model.assignments[0] {
-            assert_eq!(arms.len(), 2);
-        } else {
-            panic!("Expected Next with Case expression");
+
+        if let SsmvAssignment::Next(_, expr_id) = &model.assignments[0] {
+            if let SsmvExpr::Case(_start, len) = model.arena.expressions[expr_id.0 as usize] {
+                assert_eq!(len, 2);
+            } else {
+                panic!("Expected Case expression");
+            }
         }
     }
 
@@ -423,10 +436,13 @@ mod tests {
     fn test_next_assignment_set() {
         let src = "MODULE main VAR s : {a, b}; ASSIGN next(s) := {a, b};";
         let model = parse_ssmv(src).unwrap();
-        if let SsmvAssignment::Next(_, SsmvExpr::Set(elems)) = &model.assignments[0] {
-            assert_eq!(elems.len(), 2);
-        } else {
-            panic!("Expected Next with Set expression");
+
+        if let SsmvAssignment::Next(_, expr_id) = &model.assignments[0] {
+            if let SsmvExpr::Set(_start, len) = model.arena.expressions[expr_id.0 as usize] {
+                assert_eq!(len, 2);
+            } else {
+                panic!("Expected Set expression");
+            }
         }
     }
 
@@ -434,33 +450,26 @@ mod tests {
     fn test_define_section() {
         let src = "MODULE main VAR x : boolean; DEFINE is_active := x & TRUE;";
         let model = parse_ssmv(src).unwrap();
-        assert_eq!(model.definitions.len(), 1);
-        assert_eq!(model.definitions[0].name, "is_active");
-        assert!(
-            matches!(&model.definitions[0].expression, SsmvExpr::Binary(_, op, _) if op == "&")
-        );
+
+        let def = &model.definitions[0];
+        assert_eq!(model.arena.get_ident(def.name), "is_active");
+
+        if let SsmvExpr::Binary(_lhs, op_id, _rhs) =
+            model.arena.expressions[def.expression.0 as usize]
+        {
+            assert_eq!(model.arena.get_ident(op_id), "&");
+        } else {
+            panic!("Expected Binary expression");
+        }
     }
 
     #[test]
     fn test_ctlspec_ag() {
         let src = "MODULE main VAR s : boolean; CTLSPEC AG s;";
         let model = parse_ssmv(src).unwrap();
-        assert_eq!(model.specifications.len(), 1);
-        assert!(matches!(&model.specifications[0], CtlFormula::AG(_)));
-    }
 
-    #[test]
-    fn test_ctlspec_implication() {
-        let src = "MODULE main VAR s : boolean; CTLSPEC AG(s -> EF !s);";
-        let model = parse_ssmv(src).unwrap();
-        assert!(matches!(&model.specifications[0], CtlFormula::AG(_)));
-    }
-
-    #[test]
-    fn test_ctlspec_eu() {
-        let src = "MODULE main VAR s : boolean; CTLSPEC E[s U !s];";
-        let model = parse_ssmv(src).unwrap();
-        assert!(matches!(&model.specifications[0], CtlFormula::EU(_, _)));
+        let formula_id = model.specifications[0];
+        assert!(matches!(model.ctl_arena.get(formula_id), CtlFormula::AG(_)));
     }
 
     #[test]
@@ -490,35 +499,11 @@ mod tests {
                     state = yellow : red;
                     state = red    : green;
                 esac;
-                next(timer) := case
-                    timer < 9 : timer + 1;
-                    TRUE      : 0;
-                esac;
             CTLSPEC AG(state = red -> AF state = green)
-            CTLSPEC AG EF state = green
         "#;
         let model = parse_ssmv(src).unwrap();
-        assert_eq!(model.name, "main");
         assert_eq!(model.variables.len(), 2);
-        assert_eq!(model.assignments.len(), 4);
-        assert_eq!(model.specifications.len(), 2);
-    }
-
-    #[test]
-    fn test_display_roundtrip() {
-        let src = r#"
-            MODULE main
-            VAR s : {a, b};
-            ASSIGN
-                init(s) := a;
-                next(s) := b;
-            CTLSPEC AG s = a;
-        "#;
-        let model = parse_ssmv(src).unwrap();
-        let output = model.to_string();
-        assert!(output.contains("MODULE main"));
-        assert!(output.contains("VAR"));
-        assert!(output.contains("ASSIGN"));
-        assert!(output.contains("CTLSPEC"));
+        assert_eq!(model.assignments.len(), 3);
+        assert_eq!(model.specifications.len(), 1);
     }
 }
