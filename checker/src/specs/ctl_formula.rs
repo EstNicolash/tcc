@@ -114,7 +114,7 @@ impl CtlFormulaArena {
     ///
     /// The `FormulaID` of the inserted proposition. If the proposition is already present in the arena,
     /// its cached `FormulaID` is returned.
-    pub fn insert_proposition(&mut self, name: String) -> FormulaID {
+    pub fn insert_proposition(&mut self, name: &str) -> FormulaID {
         let prop_id = self.intern_proposition(name);
         self.insert(CtlFormula::Prop(prop_id))
     }
@@ -129,14 +129,15 @@ impl CtlFormulaArena {
     ///
     /// The `PropositionID` of the inserted proposition. If the proposition is already present in the arena,
     /// its cached `PropositionID` is returned.
-    fn intern_proposition(&mut self, name: String) -> PropositionID {
-        if let Some(&cached) = self.proposition_lookup.get(&name) {
+    fn intern_proposition(&mut self, name: &str) -> PropositionID {
+        if let Some(&cached) = self.proposition_lookup.get(name) {
             return cached;
         }
 
         let id = PropositionID(self.proposition_arena.len() as u32);
-        self.proposition_lookup.insert(name.clone(), id);
-        self.proposition_arena.push(name);
+        let name_string = name.to_string();
+        self.proposition_lookup.insert(name_string.clone(), id);
+        self.proposition_arena.push(name_string);
         id
     }
 
