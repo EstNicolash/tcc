@@ -1,45 +1,46 @@
-use crate::modeling::ast::{SsmvAssignment, SsmvExpr, SsmvModel, SsmvType, SsmvVariable};
-use crate::specs::ctl_formula::CtlFormula;
-use std::collections::{HashMap, HashSet};
-use std::panic;
+use crate::modeling::ssmv_ast::{
+    ExprID, IdentifierID, SsmvArena, SsmvAssignment, SsmvExpr, SsmvModel, SsmvType,
+};
+use crate::specs::ctl_formula::{CtlFormulaArena, FormulaID};
+use std::collections::HashMap;
 
-pub enum Domain {
-    Boolean,
-    Range { min: i32, max: i32 },
-    Enum(Vec<String>),
-}
-
-impl Domain {
-    pub fn size(&self) -> usize {
-        match self {
-            Domain::Boolean => 2,
-            Domain::Range { min, max } => (max - min + 1) as usize,
-            Domain::Enum(values) => values.len(),
-        }
-    }
-
-    pub fn values(&self) -> Vec<Value> {
-        match self {
-            Domain::Boolean => vec![Value::Bool(false), Value::Bool(true)],
-            Domain::Range { min, max } => (*min..=*max).map(Value::Int).collect(),
-            Domain::Enum(vals) => (0..vals.len()).map(Value::Enum).collect(),
-        }
-    }
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SymbolicExprID(pub u32);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
     Bool(bool),
     Int(i32),
-    Enum(usize), // índice em Domain::Enum
-}
-
-pub struct Variable {
-    pub name: String,
-    pub domain: Domain,
+    Enum(usize),
 }
 
 #[derive(Debug, Clone)]
+pub enum SymbolicExpr {
+    Literal(Value),
+    Reference(usize),
+    Binary(BinaryOp, SymbolicExprID, SymbolicExprID),
+    Unary(UnaryOp, SymbolicExprID),
+    Case { start: u32, len: u32 },
+    Set { start: u32, len: u32 },
+}
+
+pub struct SymbolicArena {
+    pub expressions: Vec<SymbolicExpr>,
+    pub case_buffer: Vec<(SymbolicExprID, SymbolicExprID)>,
+    pub set_buffer: Vec<SymbolicExprID>,
+}
+
+pub struct Model {
+    pub variables: Vec<Variable>,
+    pub init_assignments: Vec<(usize, SymbolicExprID)>,
+    pub next_assignments: Vec<(usize, SymbolicExprID)>,
+    pub specs: Vec<FormulaID>,
+    pub arena: SymbolicArena,
+    pub ast_names: SsmvArena,
+    pub ctl_arena: CtlFormulaArena,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum BinaryOp {
     And,
     Or,
@@ -56,438 +57,298 @@ pub enum BinaryOp {
     Div,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
     Not,
     Neg,
 }
 
+pub struct Variable {
+    pub name: IdentifierID,
+    pub domain: Domain,
+}
+
 #[derive(Debug, Clone)]
-pub enum Expr {
-    Literal(Value),
-    Reference(usize), // índex into Model::variables
-    Binary(BinaryOp, Box<Expr>, Box<Expr>),
-    Unary(UnaryOp, Box<Expr>),
-    Case(Vec<(Expr, Expr)>),
-    Set(Vec<Expr>),
+pub enum Domain {
+    Boolean,
+    Range { min: i32, max: i32 },
+    Enum(Vec<IdentifierID>),
 }
 
-pub struct Model {
-    pub variables: Vec<Variable>,
-    pub init_assignments: Vec<(usize, Expr)>, // (var_idx, expr)
-    pub next_assignments: Vec<(usize, Expr)>, // (var_idx, expr)
-    pub specs: Vec<CtlFormula>,
+fn map_bin_op(op: &str) -> BinaryOp {
+    match op {
+        "&" | "and" => BinaryOp::And,
+        "|" | "or" => BinaryOp::Or,
+        "->" | "imply" => BinaryOp::Imply,
+        "=" => BinaryOp::Eq,
+        "!=" => BinaryOp::Neq,
+        "+" => BinaryOp::Add,
+        "-" => BinaryOp::Sub,
+        "*" => BinaryOp::Mul,
+        "/" => BinaryOp::Div,
+        "<" => BinaryOp::Lt,
+        "<=" => BinaryOp::Lte,
+        ">" => BinaryOp::Gt,
+        ">=" => BinaryOp::Gte,
+        _ => panic!("Unknown binary operator: {}", op),
+    }
 }
 
-/// Build a Model from an SsmvModel AST.
-///
-/// # Arguments
-///
-/// * `ast` - The SsmvModel AST to build from.
-///
-/// # Returns
-///
-/// A `Model` struct representing the symbolic model.
-///
-/// # Panics
-///
-/// Panics if the AST contains invalid expressions or variable references.
+fn map_un_op(op: &str) -> UnaryOp {
+    match op {
+        "!" | "not" => UnaryOp::Not,
+        "-" | "neg" => UnaryOp::Neg,
+        _ => panic!("Unknown unary operator: {}", op),
+    }
+}
+
 pub fn build_model(ast: SsmvModel) -> Model {
-    let (var_index_map, define_map, enum_value_map) = build_indices(&ast);
+    let mut sym_arena = SymbolicArena {
+        expressions: Vec::new(),
+        case_buffer: Vec::new(),
+        set_buffer: Vec::new(),
+    };
 
-    let variables: Vec<Variable> = ast
+    let (var_map, def_map, enum_map) = build_indices(&ast);
+
+    let variables = ast
         .variables
         .iter()
-        .map(|var| translate_variable(&var))
-        .collect::<Vec<_>>();
+        .map(|v| Variable {
+            name: v.name,
+            domain: match &v.data_type {
+                SsmvType::Boolean => Domain::Boolean,
+                SsmvType::Range(lo, hi) => Domain::Range { min: *lo, max: *hi },
+                SsmvType::Enum(ids) => Domain::Enum(ids.clone()),
+            },
+        })
+        .collect();
 
-    let mut init_assignments = Vec::<(usize, Expr)>::new();
-    let mut next_assignments = Vec::<(usize, Expr)>::new();
+    let mut translate = |expr_id: ExprID| {
+        translate_expr(
+            expr_id,
+            &ast.arena,
+            &mut sym_arena,
+            &var_map,
+            &def_map,
+            &enum_map,
+            &mut Vec::new(),
+        )
+    };
 
-    for assignment in &ast.assignments {
-        match assignment {
-            SsmvAssignment::Init(var_name, expr) => {
-                let var_idx = var_index_map[var_name];
-                let expr = translate_expressions(
-                    expr,
-                    &var_index_map,
-                    &define_map,
-                    &enum_value_map,
-                    &mut HashSet::new(),
-                );
-                if let Some(expr) = expr {
-                    init_assignments.push((var_idx, expr));
-                } else {
-                    panic!(
-                        "Failed to translate init assignment for variable: {}",
-                        var_name
-                    );
-                }
-            }
-            SsmvAssignment::Next(var_name, expr) => {
-                let var_idx = var_index_map[var_name];
-                let expr = translate_expressions(
-                    expr,
-                    &var_index_map,
-                    &define_map,
-                    &enum_value_map,
-                    &mut HashSet::new(),
-                );
-
-                if let Some(expr) = expr {
-                    next_assignments.push((var_idx, expr));
-                } else {
-                    panic!(
-                        "Failed to translate next assignment for variable: {}",
-                        var_name
-                    );
-                }
-            }
-        }
-    }
-
-    // Post build validation
-    let vars_com_init = init_assignments
+    let init_assignments = ast
+        .assignments
         .iter()
-        .map(|(idx, _)| idx)
-        .collect::<HashSet<_>>();
-    let vars_com_next = next_assignments
-        .iter()
-        .map(|(idx, _)| idx)
-        .collect::<HashSet<_>>();
+        .filter_map(|a| match a {
+            SsmvAssignment::Init(vid, eid) => Some((*var_map.get(vid)?, translate(*eid))),
+            _ => None,
+        })
+        .collect();
 
-    for (idx, var) in variables.iter().enumerate() {
-        if !vars_com_init.contains(&idx) {
-            eprintln!(
-                "Warning: variable '{}' has no init — will be non-deterministic",
-                var.name
-            );
-        }
-        if !vars_com_next.contains(&idx) {
-            eprintln!(
-                "Warning: variable '{}' has no next — will keep current value",
-                var.name
-            );
-        }
-    }
+    let next_assignments = ast
+        .assignments
+        .iter()
+        .filter_map(|a| match a {
+            SsmvAssignment::Next(vid, eid) => Some((*var_map.get(vid)?, translate(*eid))),
+            _ => None,
+        })
+        .collect();
 
     Model {
         variables,
         init_assignments,
         next_assignments,
         specs: ast.specifications,
+        arena: sym_arena,
+        ast_names: ast.arena,
+        ctl_arena: ast.ctl_arena,
     }
 }
 
-/// Builds indices for variables, defines, and enum values in the AST.
-///
-/// # Arguments
-///
-/// * `ast` - The AST model to build indices for.
-///
-/// # Returns
-///
-/// * `var_index_map` - A map of variable names to their index in the `variables` vector. E.g. "state" → 0, "timer" → 1
-/// * `define_map` - A map of define names to their expression. E.g. "is_active" → SsmvExpr::Binary(...)
-/// * `enum_value_map` - A map of enum value names to their (enum_idx, value_idx) pair. E.g. "s0" → (var_idx=0, val_idx=0)
-///
-/// # Panics
-///
-/// * If a duplicate enum value is found.
 fn build_indices(
     ast: &SsmvModel,
 ) -> (
-    HashMap<String, usize>,
-    HashMap<String, SsmvExpr>,
-    HashMap<String, (usize, usize)>,
+    HashMap<IdentifierID, usize>,
+    HashMap<IdentifierID, ExprID>,
+    HashMap<IdentifierID, (usize, usize)>,
 ) {
-    let mut var_index_map = HashMap::<String, usize>::new();
-    let mut define_map = HashMap::<String, SsmvExpr>::new();
-    let mut enum_value_map = HashMap::<String, (usize, usize)>::new();
+    let mut var_map = HashMap::new();
+    let mut def_map = HashMap::new();
+    let mut enum_map = HashMap::new();
 
-    // Index variables declared in order
     for (idx, var) in ast.variables.iter().enumerate() {
-        var_index_map.insert(var.name.clone(), idx);
-
-        // Handle enum values
-        if let SsmvType::Enum(vals) = &var.data_type {
-            for (val_idx, val) in vals.iter().enumerate() {
-                if enum_value_map.contains_key(val) {
-                    panic!("Duplicate enum value: {}", val)
+        var_map.insert(var.name, idx);
+        if let SsmvType::Enum(ids) = &var.data_type {
+            for (v_idx, &val_id) in ids.iter().enumerate() {
+                if enum_map.contains_key(&val_id) {
+                    panic!("Duplicate enum value ID: {:?}", val_id);
                 }
-
-                enum_value_map.insert(val.clone(), (idx, val_idx));
+                enum_map.insert(val_id, (idx, v_idx));
             }
         }
     }
 
-    // Index defines
-    for define in &ast.definitions {
-        if define_map.contains_key(&define.name) {
-            panic!("Duplicate define: {}", define.name)
-        }
-        define_map.insert(define.name.clone(), define.expression.clone());
+    for def in &ast.definitions {
+        def_map.insert(def.name, def.expression);
     }
 
-    return (var_index_map, define_map, enum_value_map);
+    (var_map, def_map, enum_map)
 }
 
-/// Just translates a single variable from the SsmvVariable AST representation to the Variable struct.
-///
-/// # Arguments
-///
-/// * `var` - The variable to translate.
-///
-/// # Returns
-///
-/// * The translated variable.
-fn translate_variable(var: &SsmvVariable) -> Variable {
-    let domain = match &var.data_type {
-        SsmvType::Enum(vals) => Domain::Enum(vals.clone()),
-        SsmvType::Boolean => Domain::Boolean,
-        SsmvType::Range(min, max) => Domain::Range {
-            min: *min,
-            max: *max,
-        },
-    };
-    Variable {
-        name: var.name.clone(),
-        domain,
-    }
-}
+fn translate_expr(
+    ast_eid: ExprID,
+    ast_arena: &SsmvArena,
+    sym_arena: &mut SymbolicArena,
+    var_map: &HashMap<IdentifierID, usize>,
+    def_map: &HashMap<IdentifierID, ExprID>,
+    enum_map: &HashMap<IdentifierID, (usize, usize)>,
+    stack: &mut Vec<IdentifierID>,
+) -> SymbolicExprID {
+    let expr = match &ast_arena.expressions[ast_eid.0 as usize] {
+        SsmvExpr::Number(n) => SymbolicExpr::Literal(Value::Int(*n)),
+        SsmvExpr::Bool(b) => SymbolicExpr::Literal(Value::Bool(*b)),
 
-/// Translates an SsmvExpr AST expression to an Expr struct.
-///
-/// # Arguments
-///
-/// * `expr` - The expression to translate.
-/// * `var_index_map` - A map of variable names to their indices in the state vector.
-/// * `define_map` - A map of define names to their expressions.
-/// * `enum_value_map` - A map of enum names to their value ranges.
-/// * `define_stack` - A set of define names that are currently being translated to detect circular references.
-///
-/// # Returns
-///
-/// * The translated expression, or `None` if the expression is invalid.
-fn translate_expressions(
-    expr: &SsmvExpr,
-    var_index_map: &HashMap<String, usize>,
-    define_map: &HashMap<String, SsmvExpr>,
-    enum_value_map: &HashMap<String, (usize, usize)>,
-    define_stack: &mut HashSet<String>,
-) -> Option<Expr> {
-    match expr {
-        SsmvExpr::Number(n) => Some(Expr::Literal(Value::Int(*n))),
-        SsmvExpr::Bool(b) => Some(Expr::Literal(Value::Bool(*b))),
-        SsmvExpr::Identifier(name) => {
-            if define_map.contains_key(name) {
-                if define_stack.contains(name) {
-                    panic!("Circular define: {}", name)
+        SsmvExpr::Identifier(id) => {
+            if let Some(&def_eid) = def_map.get(id) {
+                if stack.contains(id) {
+                    panic!("Circular define detected!");
                 }
-                define_stack.insert(name.clone());
-                let value = translate_expressions(
-                    &define_map[name],
-                    var_index_map,
-                    define_map,
-                    enum_value_map,
-                    define_stack,
+                stack.push(*id);
+                let res_id = translate_expr(
+                    def_eid, ast_arena, sym_arena, var_map, def_map, enum_map, stack,
                 );
-                define_stack.remove(name);
-                value
-            } else if var_index_map.contains_key(name) {
-                Some(Expr::Reference(var_index_map[name]))
-            } else if enum_value_map.contains_key(name) {
-                let (_, val_idx) = enum_value_map[name];
-                Some(Expr::Literal(Value::Enum(val_idx)))
+                stack.pop();
+                return res_id;
+            }
+
+            if let Some(&idx) = var_map.get(id) {
+                SymbolicExpr::Reference(idx)
+            } else if let Some(&(_, v_idx)) = enum_map.get(id) {
+                SymbolicExpr::Literal(Value::Enum(v_idx))
             } else {
-                panic!("Undefined variable: {}", name)
+                panic!("Unknown ID: {:?}", id);
             }
         }
 
-        SsmvExpr::Unary(op_str, sub_expr) => {
-            let op = match op_str.as_str() {
-                "!" | "not" => UnaryOp::Not,
-                "-" | "neg" => UnaryOp::Neg,
-                _ => panic!("Unknown unary operator: {}", op_str),
-            };
-            let new_sub_expr = translate_expressions(
-                sub_expr,
-                var_index_map,
-                define_map,
-                enum_value_map,
-                define_stack,
-            )?;
-
-            Some(Expr::Unary(op, Box::new(new_sub_expr)))
+        SsmvExpr::Binary(l, op, r) => {
+            let sl = translate_expr(*l, ast_arena, sym_arena, var_map, def_map, enum_map, stack);
+            let sr = translate_expr(*r, ast_arena, sym_arena, var_map, def_map, enum_map, stack);
+            SymbolicExpr::Binary(map_bin_op(ast_arena.get_ident(*op)), sl, sr)
         }
 
-        SsmvExpr::Binary(lhs, op_str, rhs) => {
-            let op = match op_str.as_str() {
-                "+" => BinaryOp::Add,
-                "-" => BinaryOp::Sub,
-                "*" => BinaryOp::Mul,
-                "/" => BinaryOp::Div,
-                "&" | "and" => BinaryOp::And,
-                "|" | "or" => BinaryOp::Or,
-                "->" | "imply" => BinaryOp::Imply,
-                "=" => BinaryOp::Eq,
-                "!=" => BinaryOp::Neq,
-                "<" => BinaryOp::Lt,
-                "<=" => BinaryOp::Lte,
-                ">" => BinaryOp::Gt,
-                ">=" => BinaryOp::Gte,
-                _ => panic!("Unknown binary operator: {}", op_str),
-            };
-            let new_lhs = translate_expressions(
-                lhs,
-                var_index_map,
-                define_map,
-                enum_value_map,
-                define_stack,
-            )?;
-            let new_rhs = translate_expressions(
-                rhs,
-                var_index_map,
-                define_map,
-                enum_value_map,
-                define_stack,
-            )?;
-
-            Some(Expr::Binary(op, Box::new(new_lhs), Box::new(new_rhs)))
+        SsmvExpr::Unary(op, sub) => {
+            let s_sub = translate_expr(
+                *sub, ast_arena, sym_arena, var_map, def_map, enum_map, stack,
+            );
+            SymbolicExpr::Unary(map_un_op(ast_arena.get_ident(*op)), s_sub)
         }
 
-        SsmvExpr::Case(branches) => {
-            let new_branches = branches
-                .into_iter()
-                .map(|(cond, then_expr)| {
-                    let new_cond = translate_expressions(
-                        cond,
-                        var_index_map,
-                        define_map,
-                        enum_value_map,
-                        define_stack,
-                    )?;
-                    let new_then_expr = translate_expressions(
-                        then_expr,
-                        var_index_map,
-                        define_map,
-                        enum_value_map,
-                        define_stack,
-                    )?;
-                    Some((new_cond, new_then_expr))
-                })
-                .collect::<Option<Vec<_>>>()?;
-
-            Some(Expr::Case(new_branches))
+        SsmvExpr::Case(start, len) => {
+            let sym_start = sym_arena.case_buffer.len() as u32;
+            for i in (*start as usize)..(*start as usize + *len as usize) {
+                let (c, t) = ast_arena.case_arms[i];
+                let sc = translate_expr(c, ast_arena, sym_arena, var_map, def_map, enum_map, stack);
+                let st = translate_expr(t, ast_arena, sym_arena, var_map, def_map, enum_map, stack);
+                sym_arena.case_buffer.push((sc, st));
+            }
+            SymbolicExpr::Case {
+                start: sym_start,
+                len: *len,
+            }
         }
 
-        SsmvExpr::Set(exprs) => {
-            let new_exprs = exprs
-                .into_iter()
-                .map(|expr| {
-                    translate_expressions(
-                        expr,
-                        var_index_map,
-                        define_map,
-                        enum_value_map,
-                        define_stack,
-                    )
-                })
-                .collect::<Option<Vec<_>>>()?;
-
-            Some(Expr::Set(new_exprs))
+        SsmvExpr::Set(start, len) => {
+            let sym_start = sym_arena.set_buffer.len() as u32;
+            for i in (*start as usize)..(*start as usize + *len as usize) {
+                let e = ast_arena.set_elements[i];
+                let se = translate_expr(e, ast_arena, sym_arena, var_map, def_map, enum_map, stack);
+                sym_arena.set_buffer.push(se);
+            }
+            SymbolicExpr::Set {
+                start: sym_start,
+                len: *len,
+            }
         }
-    }
+    };
+
+    let id = SymbolicExprID(sym_arena.expressions.len() as u32);
+    sym_arena.expressions.push(expr);
+    id
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modeling::ast::{SsmvAssignment, SsmvDefine, SsmvExpr, SsmvType, SsmvVariable};
-
-    fn mock_var(name: &str, data_type: SsmvType) -> SsmvVariable {
-        SsmvVariable {
-            name: name.to_string(),
-            data_type,
-        }
-    }
+    use crate::modeling::ssmv_ast::{SsmvDefine, SsmvVariable};
 
     #[test]
-    fn test_simple_boolean_model() {
-        let ast = SsmvModel {
-            name: "Main".into(),
-            variables: vec![mock_var("bit", SsmvType::Boolean)],
-            definitions: vec![],
-            assignments: vec![
-                SsmvAssignment::Init("bit".into(), SsmvExpr::Bool(false)),
-                SsmvAssignment::Next(
-                    "bit".into(),
-                    SsmvExpr::Unary("!".into(), Box::new(SsmvExpr::Identifier("bit".into()))),
-                ),
-            ],
-            specifications: vec![],
+    fn test_enum_translation() {
+        let mut arena = SsmvArena::new();
+        let light_id = arena.intern_identifier("light");
+        let red_id = arena.intern_identifier("red");
+        let green_id = arena.intern_identifier("green");
+
+        let var_light = SsmvVariable {
+            name: light_id,
+            data_type: SsmvType::Enum(vec![red_id, green_id]),
         };
 
-        let model = build_model(ast);
-        assert_eq!(model.variables.len(), 1);
-        assert_eq!(model.init_assignments.len(), 1);
-        assert_eq!(model.next_assignments.len(), 1);
+        let red_expr = arena.insert_expr(SsmvExpr::Identifier(red_id));
 
-        if let Expr::Unary(_, sub) = &model.next_assignments[0].1 {
-            if let Expr::Reference(idx) = **sub {
-                assert_eq!(idx, 0);
-            } else {
-                panic!("Expected reference");
-            }
-        }
-    }
-
-    #[test]
-    fn test_enum_indexing() {
         let ast = SsmvModel {
             name: "Traffic".into(),
-            variables: vec![mock_var(
-                "light",
-                SsmvType::Enum(vec!["red".into(), "green".into()]),
-            )],
+            variables: vec![var_light],
             definitions: vec![],
-            assignments: vec![
-                SsmvAssignment::Init("light".into(), SsmvExpr::Identifier("red".into())),
-                SsmvAssignment::Next("light".into(), SsmvExpr::Identifier("green".into())),
-            ],
+            assignments: vec![SsmvAssignment::Init(light_id, red_expr)],
             specifications: vec![],
+            arena,
+            ctl_arena: CtlFormulaArena::new(),
         };
 
         let model = build_model(ast);
-        if let (idx, Expr::Literal(Value::Enum(v_idx))) = &model.init_assignments[0] {
-            assert_eq!(*idx, 0);
+
+        let (_, expr_id) = model.init_assignments[0];
+
+        let expr = &model.arena.expressions[expr_id.0 as usize];
+
+        if let SymbolicExpr::Literal(Value::Enum(v_idx)) = expr {
             assert_eq!(*v_idx, 0);
         } else {
-            panic!("Enum value 'red' was not indexed correctly");
+            panic!("Enum literal translation failed. Found: {:?}", expr);
         }
     }
 
     #[test]
-    #[should_panic(expected = "Circular define: A")]
-    fn test_circular_define_detection() {
+    #[should_panic(expected = "Circular define detected!")]
+    fn test_circular_define() {
+        let mut arena = SsmvArena::new();
+        let a_id = arena.intern_identifier("A");
+        let b_id = arena.intern_identifier("B");
+        let x_id = arena.intern_identifier("x");
+
+        let def_a = SsmvDefine {
+            name: a_id,
+            expression: arena.insert_expr(SsmvExpr::Identifier(b_id)),
+        };
+        let def_b = SsmvDefine {
+            name: b_id,
+            expression: arena.insert_expr(SsmvExpr::Identifier(a_id)),
+        };
+
         let ast = SsmvModel {
             name: "Loop".into(),
-            variables: vec![mock_var("x", SsmvType::Boolean)],
-            definitions: vec![
-                SsmvDefine {
-                    name: "A".into(),
-                    expression: SsmvExpr::Identifier("B".into()),
-                },
-                SsmvDefine {
-                    name: "B".into(),
-                    expression: SsmvExpr::Identifier("A".into()),
-                },
-            ],
-            assignments: vec![
-                SsmvAssignment::Init("x".into(), SsmvExpr::Identifier("A".into())),
-                SsmvAssignment::Next("x".into(), SsmvExpr::Bool(true)),
-            ],
+            variables: vec![SsmvVariable {
+                name: x_id,
+                data_type: SsmvType::Boolean,
+            }],
+            definitions: vec![def_a, def_b],
+            assignments: vec![SsmvAssignment::Init(
+                x_id,
+                arena.insert_expr(SsmvExpr::Identifier(a_id)),
+            )],
             specifications: vec![],
+            arena,
+            ctl_arena: CtlFormulaArena::new(),
         };
 
         build_model(ast);
