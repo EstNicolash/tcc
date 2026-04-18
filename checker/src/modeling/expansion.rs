@@ -1,280 +1,254 @@
-use crate::core::kripke_structure::KripkeStructure;
-use crate::modeling::symbolic::{BinaryOp, Domain, Expr, Model, UnaryOp, Value};
-use petgraph::graph::NodeIndex;
-use std::collections::{HashMap, VecDeque};
+use crate::core::kripke_structure::{KripkeBuilder, KripkeStructure, StateID};
+use crate::modeling::symbolic::{
+    BinaryOp, Domain, Model, SymbolicArena, SymbolicExpr, SymbolicExprID, UnaryOp, Value,
+};
+use std::collections::{HashMap, HashSet, VecDeque};
 
-type State = Vec<Value>;
+type State = Vec<i32>;
+
+fn is_true(v: i32) -> bool {
+    v != 0
+}
+
+fn from_bool(b: bool) -> i32 {
+    if b { 1 } else { 0 }
+}
+
+/// Converts a `Value` to the flat `i32` format used in states.
+fn value_to_i32(v: &Value) -> i32 {
+    match v {
+        Value::Bool(b) => from_bool(*b),
+        Value::Int(i) => *i,
+        Value::Enum(idx) => *idx as i32,
+    }
+}
 
 pub fn expand_to_kripke(model: &Model) -> KripkeStructure {
-    let mut ks = KripkeStructure::new();
+    let num_vars = model.variables.len();
+    let mut builder = KripkeBuilder::new(num_vars);
+    let mut queue: VecDeque<StateID> = VecDeque::new();
 
-    let mut state_map: HashMap<State, NodeIndex> = HashMap::new();
-    let mut queue: VecDeque<State> = VecDeque::new();
-
-    let initial_states = compute_initial_states(model);
-
-    /*
-    println!("=== INITIAL STATES ({}) ===", initial_states.len());
-    for (i, state) in initial_states.iter().enumerate() {
-        let labels = generate_labels(model, state);
-        println!("  [{}] {:?}", i, labels);
+    for state_data in compute_initial_states(model) {
+        let id = builder.states.get_or_insert(&state_data);
+        builder.add_initial_state(id);
+        queue.push_back(id);
     }
 
-    let first_state = &initial_states[0];
-    let next = compute_next_states(model, first_state);
-    println!("=== NEXT STATES of state 0 ({}) ===", next.len());
-    for (i, state) in next.iter().enumerate() {
-        println!("  [{}] {:?}", i, generate_labels(model, state));
-    }
+    // BFS in the state space
+    while let Some(current_id) = queue.pop_front() {
+        let current_state = builder.states.get_values(current_id);
+        let next_states_data = compute_next_states(model, current_state);
 
-    println!("=== Variables ===");
-    for var in &model.variables {
-        let has_init = model.init_assignments.iter().any(|(idx, _)| {
-            *idx == model
-                .variables
-                .iter()
-                .position(|v| v.name == var.name)
-                .unwrap()
-        });
-        let has_next = model.next_assignments.iter().any(|(idx, _)| {
-            *idx == model
-                .variables
-                .iter()
-                .position(|v| v.name == var.name)
-                .unwrap()
-        });
-        println!(
-            "  '{}': {} valores | init={} | next={}",
-            var.name,
-            var.domain.size(),
-            has_init,
-            has_next
-        );
-    }*/
+        // Avoid adding duplicate edges from the same current state
+        // by keeping track of seen next states
+        let mut seen_next: HashSet<StateID> = HashSet::new();
 
-    for state in initial_states {
-        let labels = generate_labels(model, &state);
-        let state_name = format!("s_{}", state_map.len());
+        for next_data in next_states_data {
+            let is_new = !builder.states.contains(&next_data);
+            let next_id = builder.states.get_or_insert(&next_data);
 
-        let node_idx = ks.add_state(&state_name, labels, true);
-        state_map.insert(state.clone(), node_idx);
-        queue.push_back(state);
-    }
+            if seen_next.insert(next_id) {
+                // Add edge only once per (current, next) pair
+                builder.add_transition(current_id, next_id);
+            }
 
-    while let Some(current_state) = queue.pop_front() {
-        let current_node = state_map[&current_state];
-
-        let next_states = compute_next_states(model, &current_state);
-
-        for next_state in next_states {
-            let next_node = match state_map.get(&next_state) {
-                Some(&idx) => idx,
-                None => {
-                    let labels = generate_labels(model, &next_state);
-                    let state_name = format!("s_{}", state_map.len());
-
-                    let new_node_idx = ks.add_state(&state_name, labels, false);
-                    state_map.insert(next_state.clone(), new_node_idx);
-                    queue.push_back(next_state.clone());
-
-                    new_node_idx
-                }
-            };
-
-            ks.add_transition(current_node, next_node);
+            if is_new {
+                // queue only for new states
+                queue.push_back(next_id);
+            }
         }
     }
 
-    ks.make_total();
-    ks
+    KripkeStructure::from_builder(builder)
 }
 
-fn expect_bool(v: &Value) -> bool {
-    match v {
-        Value::Bool(b) => *b,
-        other => panic!("Expected Bool, received: {:?}", other),
-    }
-}
+/// Evaluates a symbolic expression given a flat `&[i32]` state.
+///
+/// # Returns
+///
+/// `Vec<i32>` with a single element for scalar expressions,
+/// or multiple elements for `Set` (non-determinism).
+pub fn eval(expr_id: SymbolicExprID, state: &[i32], model: &Model) -> Vec<i32> {
+    let expr = &model.arena.expressions[expr_id.0 as usize];
 
-fn expect_int(v: &Value) -> i32 {
-    match v {
-        Value::Int(i) => *i,
-        other => panic!("Expected Int, received: {:?}", other),
-    }
-}
-fn eval(expr: &Expr, state: &State, model: &Model) -> Vec<Value> {
     match expr {
-        Expr::Literal(value) => vec![value.clone()],
-        Expr::Reference(var_idx) => vec![state[*var_idx].clone()],
-        Expr::Unary(op, sub) => {
-            let val = eval(sub, state, model).into_iter().next().unwrap();
-            let result = match op {
-                UnaryOp::Not => vec![Value::Bool(!expect_bool(&val))],
-                UnaryOp::Neg => vec![Value::Int(-(expect_int(&val)))],
-            };
-            result
-        }
-        Expr::Binary(op, lhs, rhs) => {
-            let lval = eval(lhs, state, model).into_iter().next().unwrap();
-            let rval = eval(rhs, state, model).into_iter().next().unwrap();
-            let result = match op {
-                BinaryOp::And => vec![Value::Bool(expect_bool(&lval) && expect_bool(&rval))],
-                BinaryOp::Or => vec![Value::Bool(expect_bool(&lval) || expect_bool(&rval))],
-                BinaryOp::Imply => vec![Value::Bool(!expect_bool(&lval) || expect_bool(&rval))],
-                BinaryOp::Eq => vec![Value::Bool(lval == rval)],
-                BinaryOp::Neq => vec![Value::Bool(lval != rval)],
-                BinaryOp::Lt => vec![Value::Bool(expect_int(&lval) < expect_int(&rval))],
-                BinaryOp::Lte => vec![Value::Bool(expect_int(&lval) <= expect_int(&rval))],
-                BinaryOp::Gt => vec![Value::Bool(expect_int(&lval) > expect_int(&rval))],
-                BinaryOp::Gte => vec![Value::Bool(expect_int(&lval) >= expect_int(&rval))],
-                BinaryOp::Add => vec![Value::Int(expect_int(&lval) + expect_int(&rval))],
-                BinaryOp::Sub => vec![Value::Int(expect_int(&lval) - expect_int(&rval))],
-                BinaryOp::Mul => vec![Value::Int(expect_int(&lval) * expect_int(&rval))],
-                BinaryOp::Div => vec![Value::Int(expect_int(&lval) / expect_int(&rval))],
-            };
-            result
-        }
-        Expr::Case(arms) => {
-            let mut result: Vec<Value> = vec![];
-            for (cond, then_expr) in arms {
-                let cond_val = eval(&cond, state, model).into_iter().next().unwrap();
-                if expect_bool(&cond_val) {
-                    result = eval(then_expr, state, model);
-                    break;
-                }
-            }
-            result
-        }
-        Expr::Set(exprs) => exprs
-            .iter()
-            .flat_map(|expr| eval(expr, state, model))
-            .collect(),
-    }
-}
+        SymbolicExpr::Literal(value) => vec![value_to_i32(value)],
+        SymbolicExpr::Reference(var_idx) => vec![state[*var_idx]],
 
-fn generate_labels(model: &Model, state: &State) -> Vec<String> {
-    let mut labels = Vec::new();
-    for (var_idx, value) in state.iter().enumerate() {
-        let var_name = &model.variables[var_idx].name;
-        match value {
-            Value::Bool(b) => {
-                if *b {
-                    labels.push(var_name.clone());
-                }
+        SymbolicExpr::Unary(op, sub_id) => {
+            let val = eval(*sub_id, state, model).into_iter().next().unwrap();
+            match op {
+                UnaryOp::Not => vec![from_bool(!is_true(val))],
+                UnaryOp::Neg => vec![-val],
             }
-            Value::Int(i) => labels.push(format!("{}={}", var_name, i)),
+        }
 
-            Value::Enum(e_idx) => {
-                if let Domain::Enum(vals) = &model.variables[var_idx].domain {
-                    labels.push(format!("{}={}", var_name, vals[*e_idx]));
+        SymbolicExpr::Binary(op, lhs_id, rhs_id) => {
+            let lval = eval(*lhs_id, state, model).into_iter().next().unwrap();
+            let rval = eval(*rhs_id, state, model).into_iter().next().unwrap();
+
+            let result = match op {
+                BinaryOp::And => from_bool(is_true(lval) && is_true(rval)),
+                BinaryOp::Or => from_bool(is_true(lval) || is_true(rval)),
+                BinaryOp::Imply => from_bool(!is_true(lval) || is_true(rval)),
+                BinaryOp::Eq => from_bool(lval == rval),
+                BinaryOp::Neq => from_bool(lval != rval),
+                BinaryOp::Lt => from_bool(lval < rval),
+                BinaryOp::Lte => from_bool(lval <= rval),
+                BinaryOp::Gt => from_bool(lval > rval),
+                BinaryOp::Gte => from_bool(lval >= rval),
+                BinaryOp::Add => lval + rval,
+                BinaryOp::Sub => lval - rval,
+                BinaryOp::Mul => lval * rval,
+                BinaryOp::Div => lval / rval,
+            };
+            vec![result]
+        }
+
+        // Case is first-match — returns as soon as a true arm is found.
+        // If no arm is satisfied, the model is malformed (case not total).
+        SymbolicExpr::Case { start, len } => {
+            for i in (*start as usize)..(*start as usize + *len as usize) {
+                let (cond_id, then_id) = model.arena.case_buffer[i];
+                let cond_val = eval(cond_id, state, model).into_iter().next().unwrap();
+                if is_true(cond_val) {
+                    return eval(then_id, state, model);
                 }
             }
+            panic!(
+                "Non-total case expression: no arm matched.\n\
+                 State: {:?}\n\
+                 Case start={}, len={}",
+                state, start, len
+            )
+        }
+
+        // Set represents non-determinism: all possible values.
+        SymbolicExpr::Set { start, len } => {
+            let mut results = Vec::new();
+            for i in (*start as usize)..(*start as usize + *len as usize) {
+                let elem_id = model.arena.set_buffer[i];
+                results.extend(eval(elem_id, state, model));
+            }
+            results
         }
     }
-    labels
 }
 
 fn compute_initial_states(model: &Model) -> Vec<State> {
-    let mut values_per_var: Vec<Vec<Value>> = vec![];
+    let init_map: HashMap<usize, SymbolicExprID> = model
+        .init_assignments
+        .iter()
+        .map(|&(idx, eid)| (idx, eid))
+        .collect();
+
+    // Dummy state with zeros — used only for init expressions
+    // that do not reference other variables.
+    let dummy_state = vec![0i32; model.variables.len()];
+
+    let mut values_per_var: Vec<Vec<i32>> = Vec::with_capacity(model.variables.len());
 
     for (idx, var) in model.variables.iter().enumerate() {
-        let assignment = model
-            .init_assignments
-            .iter()
-            .find(|(var_idx, _)| *var_idx == idx);
-
-        if let Some((_, expr)) = assignment {
-            let dummy_state = model
-                .variables
-                .iter()
-                .map(|v| v.domain.values()[0].clone())
-                .collect::<State>();
-
-            let values = eval(&expr, &dummy_state, model);
-            values_per_var.push(values);
+        if let Some(&expr_id) = init_map.get(&idx) {
+            if expr_contains_reference(expr_id, &model.arena) {
+                // The init expression references other variables.
+                // dummy_state can have an invalid value for it, so
+                // we use the full domain as a conservative fallback.
+                eprintln!(
+                    "Warning: init(var[{}]) references other variables — \
+                     using full domain as fallback",
+                    idx
+                );
+                values_per_var.push(get_domain_values(&var.domain));
+            } else {
+                // Without reference: safe to evaluate with dummy_state
+                values_per_var.push(eval(expr_id, &dummy_state, model));
+            }
         } else {
-            values_per_var.push(var.domain.values());
+            // Without init: non-deterministic variable — use full domain
+            values_per_var.push(get_domain_values(&var.domain));
         }
     }
 
     cartesian_product(&values_per_var)
 }
 
-/// Computes the Cartesian product of a set of value sets.
-/// # Arguments
+fn compute_next_states(model: &Model, state: &[i32]) -> Vec<State> {
+    let next_map: HashMap<usize, SymbolicExprID> = model
+        .next_assignments
+        .iter()
+        .map(|&(idx, eid)| (idx, eid))
+        .collect();
+
+    let mut values_per_var = Vec::with_capacity(model.variables.len());
+
+    for (idx, _) in model.variables.iter().enumerate() {
+        if let Some(&expr_id) = next_map.get(&idx) {
+            // With next: evaluate next expression
+            values_per_var.push(eval(expr_id, state, model));
+        } else {
+            // Without next: frame condition — variável mantém valor atual
+            values_per_var.push(vec![state[idx]]);
+        }
+    }
+
+    cartesian_product(&values_per_var)
+}
+
+/// Returns true if the expression `expr_id` contains any `Reference`
+/// (i.e., references a state variable).
 ///
-/// * `sets` - A vector of value sets to compute the product of.
-///
-/// # Returns
-///
-/// A vector of states representing the Cartesian product of the input sets.
+/// Used to decide if it's safe to evaluate an `init` expression with
+/// a dummy state of zeros.
+fn expr_contains_reference(expr_id: SymbolicExprID, arena: &SymbolicArena) -> bool {
+    let expr = &arena.expressions[expr_id.0 as usize];
+    match expr {
+        SymbolicExpr::Reference(_) => true,
+        SymbolicExpr::Literal(_) => false,
+
+        SymbolicExpr::Unary(_, sub) => expr_contains_reference(*sub, arena),
+        SymbolicExpr::Binary(_, lhs, rhs) => {
+            expr_contains_reference(*lhs, arena) || expr_contains_reference(*rhs, arena)
+        }
+
+        SymbolicExpr::Case { start, len } => (0..*len as usize).any(|i| {
+            let (cond, then) = arena.case_buffer[*start as usize + i];
+            expr_contains_reference(cond, arena) || expr_contains_reference(then, arena)
+        }),
+
+        SymbolicExpr::Set { start, len } => (0..*len as usize)
+            .any(|i| expr_contains_reference(arena.set_buffer[*start as usize + i], arena)),
+    }
+}
+
+fn get_domain_values(domain: &Domain) -> Vec<i32> {
+    match domain {
+        Domain::Boolean => vec![0, 1],
+        Domain::Range { min, max } => (*min..=*max).collect(),
+        Domain::Enum(vals) => (0..vals.len() as i32).collect(),
+    }
+}
+
+/// Compute the Cartesian product of a list of sets.
 ///
 /// # Example:
-/// * `VAR x : {a,b}; y : boolean;`
-///
-/// * `init(x) := {a, b};`    Set → values_per_var\[0\] = \[Enum(0), Enum(1)\]
-/// * `init(y) := FALSE;`     Lit → values_per_var\[1\] = \[Bool(false)\]
-///
-/// * `cartesian_product(&values_per_var)` → [[Enum(0), Bool(false)],
-///                                       [Enum(1), Bool(false)]]
-fn cartesian_product(sets: &Vec<Vec<Value>>) -> Vec<State> {
+/// ```
+/// let sets = vec![vec![1, 2], vec![3, 4]];
+/// // → [[1,3], [1,4], [2,3], [2,4]]
+/// ```
+fn cartesian_product(sets: &[Vec<i32>]) -> Vec<State> {
     let mut result: Vec<State> = vec![vec![]];
 
     for set in sets {
         let mut new_result = Vec::new();
         for state in &result {
-            for val in set {
+            for &val in set {
                 let mut concat = state.clone();
-                concat.push(val.clone());
+                concat.push(val);
                 new_result.push(concat);
             }
         }
         result = new_result;
     }
     result
-}
-
-fn compute_next_states(model: &Model, state: &State) -> Vec<State> {
-    let mut values_per_var: Vec<Vec<Value>> = vec![];
-
-    for (idx, _) in model.variables.iter().enumerate() {
-        let assignment = model
-            .next_assignments
-            .iter()
-            .find(|(var_idx, _)| *var_idx == idx);
-
-        if let Some((_, expr)) = assignment {
-            let vals = eval(expr, state, model);
-            /*
-            println!(
-                "  next('{}') → {} valores: {:?}",
-                var.name,
-                vals.len(),
-                vals.iter()
-                    .map(|v| generate_labels_single(model, idx, v))
-                    .collect::<Vec<_>>()
-            );*/
-
-            values_per_var.push(vals);
-        } else {
-            values_per_var.push(vec![state[idx].clone()]);
-        }
-    }
-
-    cartesian_product(&values_per_var)
-}
-
-fn generate_labels_single(model: &Model, var_idx: usize, value: &Value) -> String {
-    let var_name = &model.variables[var_idx].name;
-    match value {
-        Value::Bool(b) => format!("{}={}", var_name, b),
-        Value::Int(i) => format!("{}={}", var_name, i),
-        Value::Enum(e) => {
-            if let Domain::Enum(vals) = &model.variables[var_idx].domain {
-                format!("{}={}", var_name, vals[*e])
-            } else {
-                format!("{}={}", var_name, e)
-            }
-        }
-    }
 }
