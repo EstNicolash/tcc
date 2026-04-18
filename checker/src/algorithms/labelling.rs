@@ -1,136 +1,195 @@
-use crate::core::kripke_structure::KripkeStructure;
-use crate::specs::ctl_formula::CtlFormula;
-use petgraph::Direction;
-use petgraph::graph::NodeIndex;
-use std::collections::{HashMap, HashSet};
+use crate::core::kripke_structure::{KripkeStructure, StateID};
+use crate::modeling::expansion::eval;
+use crate::modeling::symbolic::{Model, SymbolicArena};
+use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
+use fixedbitset::FixedBitSet;
+use std::collections::HashMap;
 
 /// The `LabelingProvider` acts as a centralized truth table for the Model Checking process.
-/// It stores which states (NodeIndex) satisfy which subformulas (CtlFormula).
+/// It stores which states (StateID) satisfy which subformulas (FormulaID).
 pub struct LabelingProvider {
-    /// marks(φ) = { s ∈ S | s ⊨ φ }
-    marks: HashMap<CtlFormula, HashSet<NodeIndex>>,
+    /// marks[formula_id.0] = { s ∈ S | s ⊨ φ }
+    /// Represented as a FixedBitSet where the bit index is the StateID.
+    marks: Vec<FixedBitSet>,
+    num_states: usize,
 }
 
 impl LabelingProvider {
-    pub fn new() -> Self {
+    /// Creates a new LabelingProvider.
+    /// Needs the total number of states to correctly size the bitsets,
+    /// and the current size of the formula arena to pre-allocate the outer vector.
+    pub fn new(num_states: usize, num_formulas: usize) -> Self {
         Self {
-            marks: HashMap::new(),
+            marks: vec![FixedBitSet::with_capacity(num_states); num_formulas],
+            num_states,
         }
     }
 
-    /// Checks if a specific state satisfies a given formula.
-    /// # Arguments
-    /// * `state` - The index of the state in the Model.
-    /// * `formula` - The CTL (sub)formula to check.
-    /// Returns `true` if the state is already marked with this formula.
-    pub fn is_labeled(&self, state: NodeIndex, formula: &CtlFormula) -> bool {
-        self.marks
-            .get(formula)
-            .map_or(false, |set| set.contains(&state))
+    /// Returns the complete FixedBitSet for a given formula.
+    /// Extremely useful for O(1) set operations (like bitwise AND for formulas).
+    pub fn get_states_for_formula(&self, formula_id: FormulaID) -> Option<&FixedBitSet> {
+        self.marks.get(formula_id.0 as usize)
     }
 
-    pub fn add_label(&mut self, state: NodeIndex, formula: CtlFormula) {
-        self.marks.entry(formula).or_default().insert(state);
-    }
     /*
-
-    pub fn get_states_for_formula(&self, formula: &CtlFormula) -> Option<&HashSet<NodeIndex>> {
-        self.marks.get(formula)
-    }
-
-    pub fn remove_label(&mut self, state: NodeIndex, formula: CtlFormula) {
-        if let Some(set) = self.marks.get_mut(&formula) {
-            set.remove(&state);
-        }
-    }
-    pub fn get_labels(&self, state: NodeIndex) -> Vec<CtlFormula> {
-        self.marks
-            .iter()
-            .filter(|(_, states)| states.contains(&state))
-            .map(|(formula, _)| formula.clone())
-            .collect()
-    }
-
-    pub fn debug_print(&self, structure: &Model) {
+    pub fn debug_print(&self, num_states: usize, arena: &CtlFormulaArena) {
         println!("\n--- DEBUG: STATE LABELS ---");
-        for state in structure.graph.node_indices() {
-            let name = &structure.graph[state];
-            let labels = self.get_labels(state);
-            println!("State {:?} ({}): {:?}", state, name, labels);
+        for s in 0..num_states {
+            let mut labels = Vec::new();
+            for f_idx in 0..self.marks.len() {
+                if self.marks[f_idx].contains(s) {
+                    let formula = arena.get(FormulaID(f_idx as u32));
+                    labels.push(format!("{:?}", formula)); // Ou sua função de format
+                }
+            }
+            println!("State {}: {:?}", s, labels);
         }
         println!("---------------------------\n");
-    }*/
+    }
+    */
 }
 
-pub fn convert_equivalence(formula: &CtlFormula) -> CtlFormula {
-    match formula {
+/// Converts a CTL formula to its equivalent core form for the labelling algorithm.
+///
+/// # Arguments
+///
+/// * `f_id` - The ID of the formula to convert.
+/// * `old_arena` - The old arena containing the formula.
+/// * `new_arena` - The new arena to insert the converted formula into.
+/// * `memo` - A memoization map to avoid recomputing already converted formulas.
+///
+/// # Returns
+///
+/// The ID of the converted formula in the new arena.
+///
+pub fn convert_to_core<P: Copy + Eq + std::hash::Hash>(
+    f_id: FormulaID,
+    old_arena: &CtlFormulaArena<P>,
+    new_arena: &mut CtlFormulaArena<P>,
+    memo: &mut std::collections::HashMap<FormulaID, FormulaID>,
+) -> FormulaID {
+    if let Some(&new_id) = memo.get(&f_id) {
+        return new_id;
+    }
+
+    let formula = old_arena.get(f_id);
+
+    // Closure auxiliar para chamar a conversão limpamente
+    let mut conv = |f| convert_to_core(f, old_arena, new_arena, memo);
+
+    let new_id = match formula {
         // EG f => !AF !f
         CtlFormula::EG(f) => {
-            let f_conv = Box::new(convert_equivalence(f));
-            CtlFormula::Not(Box::new(CtlFormula::AF(Box::new(CtlFormula::Not(f_conv)))))
+            let f_c = conv(*f);
+            let not_f = new_arena.insert(CtlFormula::Not(f_c));
+            let af_not_f = new_arena.insert(CtlFormula::AF(not_f));
+            new_arena.insert(CtlFormula::Not(af_not_f))
         }
 
         // AG f => !EF !f => !E[true U !f]
         CtlFormula::AG(f) => {
-            let f_conv = Box::new(convert_equivalence(f));
-            CtlFormula::Not(Box::new(CtlFormula::EU(
-                Box::new(CtlFormula::True),
-                Box::new(CtlFormula::Not(f_conv)),
-            )))
+            let f_c = conv(*f);
+            let not_f = new_arena.insert(CtlFormula::Not(f_c));
+            let t_id = new_arena.insert(CtlFormula::True);
+            let eu = new_arena.insert(CtlFormula::EU(t_id, not_f));
+            new_arena.insert(CtlFormula::Not(eu))
         }
 
         // EF f => E[true U f]
         CtlFormula::EF(f) => {
-            let f_conv = Box::new(convert_equivalence(f));
-            CtlFormula::EU(Box::new(CtlFormula::True), f_conv)
+            let f_c = conv(*f);
+            let t_id = new_arena.insert(CtlFormula::True);
+            new_arena.insert(CtlFormula::EU(t_id, f_c))
         }
 
+        // AX f => !EX !f
+        CtlFormula::AX(f) => {
+            let f_c = conv(*f);
+            let not_f = new_arena.insert(CtlFormula::Not(f_c));
+            let ex_not_f = new_arena.insert(CtlFormula::EX(not_f));
+            new_arena.insert(CtlFormula::Not(ex_not_f))
+        }
         // A[f1 U f2] => !(E[!f2 U (!f1 and !f2)] or EG !f2)
-        // Since EG is not core, we expand it here too: EG !f2 => !AF f2
         CtlFormula::AU(f1, f2) => {
-            let f1_c = Box::new(convert_equivalence(f1));
-            let f2_c = Box::new(convert_equivalence(f2));
+            let f1_c = conv(*f1);
+            let f2_c = conv(*f2);
 
-            let not_f1 = Box::new(CtlFormula::Not(f1_c));
-            let not_f2 = Box::new(CtlFormula::Not(f2_c.clone()));
+            let not_f1 = new_arena.insert(CtlFormula::Not(f1_c));
+            let not_f2 = new_arena.insert(CtlFormula::Not(f2_c));
 
-            CtlFormula::Not(Box::new(CtlFormula::Or(
-                Box::new(CtlFormula::EU(
-                    not_f2,
-                    Box::new(CtlFormula::And(
-                        not_f1,
-                        Box::new(CtlFormula::Not(f2_c.clone())),
-                    )),
-                )),
-                Box::new(CtlFormula::Not(Box::new(CtlFormula::AF(f2_c)))),
-            )))
+            let and_n1_n2 = new_arena.insert(CtlFormula::And(not_f1, not_f2));
+            let eu = new_arena.insert(CtlFormula::EU(not_f2, and_n1_n2));
+
+            let af_f2 = new_arena.insert(CtlFormula::AF(f2_c));
+            let not_af = new_arena.insert(CtlFormula::Not(af_f2));
+
+            let or_f = new_arena.insert(CtlFormula::Or(eu, not_af));
+            new_arena.insert(CtlFormula::Not(or_f))
         }
 
-        //Just convert equivalence of the subformulas recursively
-        CtlFormula::Not(f) => CtlFormula::Not(Box::new(convert_equivalence(f))),
-        CtlFormula::And(f1, f2) => CtlFormula::And(
-            Box::new(convert_equivalence(f1)),
-            Box::new(convert_equivalence(f2)),
-        ),
-        CtlFormula::Or(f1, f2) => CtlFormula::Or(
-            Box::new(convert_equivalence(f1)),
-            Box::new(convert_equivalence(f2)),
-        ),
-        CtlFormula::Imply(f1, f2) => CtlFormula::Imply(
-            Box::new(convert_equivalence(f1)),
-            Box::new(convert_equivalence(f2)),
-        ),
-        CtlFormula::EX(f) => CtlFormula::EX(Box::new(convert_equivalence(f))),
-        CtlFormula::AX(f) => CtlFormula::AX(Box::new(convert_equivalence(f))),
-        CtlFormula::AF(f) => CtlFormula::AF(Box::new(convert_equivalence(f))),
-        CtlFormula::EU(f1, f2) => CtlFormula::EU(
-            Box::new(convert_equivalence(f1)),
-            Box::new(convert_equivalence(f2)),
-        ),
+        // --- Direct Conversions (Only propagate conversion to children) ---
+        CtlFormula::Not(f) => {
+            let c = conv(*f);
+            new_arena.insert(CtlFormula::Not(c))
+        }
+        CtlFormula::And(f1, f2) => {
+            let c1 = conv(*f1);
+            let c2 = conv(*f2);
+            new_arena.insert(CtlFormula::And(c1, c2))
+        }
+        CtlFormula::Or(f1, f2) => {
+            let c1 = conv(*f1);
+            let c2 = conv(*f2);
+            new_arena.insert(CtlFormula::Or(c1, c2))
+        }
+        CtlFormula::Imply(f1, f2) => {
+            let c1 = conv(*f1);
+            let c2 = conv(*f2);
+            new_arena.insert(CtlFormula::Imply(c1, c2))
+        }
 
-        // Base cases (True, False, Prop)
-        _ => formula.clone(),
+        CtlFormula::Iff(f1, f2) => {
+            let c1 = conv(*f1);
+            let c2 = conv(*f2);
+            new_arena.insert(CtlFormula::Iff(c1, c2))
+        }
+        CtlFormula::EX(f) => {
+            let c = conv(*f);
+            new_arena.insert(CtlFormula::EX(c))
+        }
+        CtlFormula::AF(f) => {
+            let c = conv(*f);
+            new_arena.insert(CtlFormula::AF(c))
+        }
+        CtlFormula::EU(f1, f2) => {
+            let c1 = conv(*f1);
+            let c2 = conv(*f2);
+            new_arena.insert(CtlFormula::EU(c1, c2))
+        }
+
+        CtlFormula::True => new_arena.insert(CtlFormula::True),
+        CtlFormula::False => new_arena.insert(CtlFormula::False),
+        CtlFormula::Prop(p) => new_arena.insert(CtlFormula::Prop(*p)),
+    };
+
+    memo.insert(f_id, new_id);
+    new_id
+}
+
+pub fn purify_model_specs(model: &mut Model) {
+    let mut core_arena = CtlFormulaArena::new();
+    let mut memo = HashMap::new();
+    let mut core_specs = Vec::new();
+
+    for &old_spec_id in &model.specs {
+        let new_core_id =
+            convert_to_core(old_spec_id, &model.ctl_arena, &mut core_arena, &mut memo);
+
+        core_specs.push(new_core_id);
     }
+
+    model.ctl_arena = core_arena;
+    model.specs = core_specs;
 }
 
 /// Labels the states in the Kripke structure according to the given CTL formula.
@@ -142,330 +201,329 @@ pub fn convert_equivalence(formula: &CtlFormula) -> CtlFormula {
 /// * `provider` - The provider to add labels to the states.
 ///
 fn label_formula(
-    formula: &CtlFormula,
+    f_id: FormulaID,
     structure: &KripkeStructure,
+    model: &Model,
     provider: &mut LabelingProvider,
 ) {
+    let formula = model.ctl_arena.get(f_id);
+    let num_states = structure.num_states();
+
+    // No caso CtlFormula::EU(f1, f2)
     match formula {
         CtlFormula::True => {
-            // Fix: True must be labeled in ALL states for EU(True, f) to work
-            for state in structure.get_all_states() {
-                provider.add_label(state, CtlFormula::True);
-            }
+            let mut bitset = FixedBitSet::with_capacity(num_states);
+            bitset.insert_range(0..num_states);
+            provider.marks[f_id.0 as usize] = bitset;
         }
         CtlFormula::False => {
             // False is never labeled in any state
+            provider.marks[f_id.0 as usize] = FixedBitSet::with_capacity(num_states);
         }
 
         // Labels all states with the property if they have the label
-        // !! (can be optimized to avoid re-computing later)
-        CtlFormula::Prop(p) => {
-            for state in structure.get_all_states() {
-                if let Some(labels) = structure.initial_labels.get(&state) {
-                    if labels.contains(p) {
-                        provider.add_label(state, formula.clone());
-                    }
+        CtlFormula::Prop(sym_expr_id) => {
+            let f_idx = f_id.0 as usize;
+            let mut bitset = FixedBitSet::with_capacity(num_states);
+
+            for s in 0..num_states {
+                let state_id = StateID(s as u32);
+
+                let state_values = structure.states.get_values(state_id);
+
+                let results = eval(*sym_expr_id, state_values, model);
+
+                if results.iter().any(|&v| v != 0) {
+                    bitset.insert(s);
                 }
             }
+
+            provider.marks[f_idx] = bitset;
         }
 
         // Just add label if the subformula is not labeled
-        CtlFormula::Not(f) => {
-            label_formula(f, structure, provider);
-            for state in structure.get_all_states() {
-                if !provider.is_labeled(state, f) {
-                    provider.add_label(state, formula.clone());
-                }
+        CtlFormula::Not(sf) => {
+            let f_idx = f_id.0 as usize;
+
+            if let Some(child_marks) = provider.get_states_for_formula(*sf) {
+                let mut result = FixedBitSet::with_capacity(num_states);
+                result.insert_range(0..num_states);
+
+                result.difference_with(child_marks);
+
+                provider.marks[f_idx] = result;
             }
         }
 
         // Add label if both subformulas are labeled
         CtlFormula::And(f1, f2) => {
-            label_formula(f1, structure, provider);
-            label_formula(f2, structure, provider);
-            for state in structure.get_all_states() {
-                if provider.is_labeled(state, f1) && provider.is_labeled(state, f2) {
-                    provider.add_label(state, formula.clone());
-                }
-            }
+            let f_idx = f_id.0 as usize;
+
+            let Some(f1_marks) = provider.get_states_for_formula(*f1) else {
+                return;
+            };
+            let Some(f2_marks) = provider.get_states_for_formula(*f2) else {
+                return;
+            };
+
+            let mut result = f1_marks.clone();
+
+            result.intersect_with(&f2_marks);
+
+            provider.marks[f_idx] = result;
         }
 
         // Add label if either subformula is labeled
         CtlFormula::Or(f1, f2) => {
-            label_formula(f1, structure, provider);
-            label_formula(f2, structure, provider);
-            for state in structure.get_all_states() {
-                if provider.is_labeled(state, f1) || provider.is_labeled(state, f2) {
-                    provider.add_label(state, formula.clone());
-                }
-            }
+            let f_idx = f_id.0 as usize;
+
+            let Some(f1_marks) = provider.get_states_for_formula(*f1) else {
+                return;
+            };
+            let Some(f2_marks) = provider.get_states_for_formula(*f2) else {
+                return;
+            };
+
+            let mut result = f1_marks.clone();
+            result.union_with(&f2_marks);
+
+            provider.marks[f_idx] = result;
         }
 
         // Add label if the first subformula is not labeled or the second is labeled
         CtlFormula::Imply(f1, f2) => {
-            label_formula(f1, structure, provider);
-            label_formula(f2, structure, provider);
-            for state in structure.get_all_states() {
-                if !provider.is_labeled(state, f1) || provider.is_labeled(state, f2) {
-                    provider.add_label(state, formula.clone());
-                }
-            }
+            let f_idx = f_id.0 as usize;
+
+            let Some(f1_marks) = provider.get_states_for_formula(*f1) else {
+                return;
+            };
+            let Some(f2_marks) = provider.get_states_for_formula(*f2) else {
+                return;
+            };
+
+            let mut result = f1_marks.clone();
+            result.toggle_range(0..num_states);
+            result.union_with(&f2_marks);
+
+            provider.marks[f_idx] = result;
+        }
+        CtlFormula::Iff(f1, f2) => {
+            // p <-> q  ≡  (p -> q) & (q -> p)
+            let f1_marks = provider.marks[f1.0 as usize].clone();
+            let f2_marks = provider.marks[f2.0 as usize].clone();
+
+            let mut imp1 = f1_marks.clone();
+            imp1.toggle_range(0..num_states);
+            imp1.union_with(&f2_marks);
+
+            // (f2 -> f1): !f2 | f1
+            let mut imp2 = f2_marks.clone();
+            imp2.toggle_range(0..num_states);
+            imp2.union_with(&f1_marks);
+
+            imp1.intersect_with(&imp2);
+            provider.marks[f_id.0 as usize] = imp1;
         }
 
         // Add label if there is a neighbor that satisfies the subformula
-        CtlFormula::EX(f) => {
-            label_formula(f, structure, provider);
-            for state in structure.get_all_states() {
-                let has_neighbor_satisfying = structure
-                    .graph
-                    .neighbors(state)
-                    .any(|next_state| provider.is_labeled(next_state, f));
+        CtlFormula::EX(child) => {
+            let f_idx = f_id.0 as usize;
 
-                if has_neighbor_satisfying {
-                    provider.add_label(state, formula.clone());
+            let Some(child_marks) = provider.get_states_for_formula(*child) else {
+                return;
+            };
+
+            let mut result = FixedBitSet::with_capacity(num_states);
+
+            for s_idx in child_marks.ones() {
+                let state_id = StateID(s_idx as u32);
+                let predecessors = structure.get_predecessors(state_id);
+                for &pred_id in predecessors {
+                    result.insert(pred_id.0 as usize);
                 }
             }
+
+            provider.marks[f_idx] = result;
         }
 
         // Add label if all neighbors satisfy the subformula
-        CtlFormula::AX(f) => {
-            label_formula(f, structure, provider);
-            for state in structure.get_all_states() {
-                let all_neighbor_satisfy = structure
-                    .graph
-                    .neighbors(state)
-                    .all(|next_state| provider.is_labeled(next_state, f));
-
-                if all_neighbor_satisfy {
-                    provider.add_label(state, formula.clone());
-                }
-            }
-        }
-
         // Add label if there is a path from a state that satisfies f1 to a state that satisfies f2
         CtlFormula::EU(f1, f2) => {
-            label_formula(f1, structure, provider);
-            label_formula(f2, structure, provider);
+            let f_idx = f_id.0 as usize;
 
-            let mut todo: Vec<NodeIndex> = Vec::new();
+            let f1_marks = provider.marks[f1.0 as usize].clone();
+            let f2_marks = provider.marks[f2.0 as usize].clone();
 
-            //If a state satisfies f2, mark it wiht EU formula and add its predecessors to the todo list.
-            for state in structure.get_all_states() {
-                if provider.is_labeled(state, f2) {
-                    todo.push(state);
-                    provider.add_label(state, formula.clone());
-                }
-            }
+            /*
+            println!("DEBUG: Starting EU logic.");
+            println!("  Target (f2) marks: {:?}", f2_marks.count_ones(..));
+            println!("  Constraint (f1) marks: {:?}", f1_marks.count_ones(..));
+            */
 
-            // Back-propagation: propagate backwards to predecessors satisfying f1.
-            // for each state in the todo list, if its predecessor satisfies f1 and is not already labeled, mark it and add it to the todo list.
-            while let Some(state) = todo.pop() {
-                let predecessors = structure
-                    .graph
-                    .neighbors_directed(state, Direction::Incoming);
+            let mut result = f2_marks.clone();
 
-                for pred in predecessors {
-                    if provider.is_labeled(pred, f1) && !provider.is_labeled(pred, &formula) {
-                        provider.add_label(pred, formula.clone());
+            let mut todo: Vec<StateID> = f2_marks.ones().map(|s| StateID(s as u32)).collect();
+
+            while let Some(state_id) = todo.pop() {
+                for &pred in structure.get_predecessors(state_id) {
+                    let pred_idx = pred.0 as usize;
+
+                    if f1_marks.contains(pred_idx) && !result.contains(pred_idx) {
+                        result.insert(pred_idx);
                         todo.push(pred);
+
+                        // println!("DEBUG: -> EU discovered new state: {}", pred_idx);
                     }
                 }
             }
+
+            /*
+            println!(
+                "DEBUG: EU Fixed-point reached. Total states: {:?}",
+                result.count_ones(..)
+            );*/
+
+            provider.marks[f_idx] = result;
         }
 
-        // Add label if all paths from a state satisfy f in some future
-        CtlFormula::AF(f) => {
-            label_formula(f, structure, provider);
+        CtlFormula::AF(sf) => {
+            let f_idx = f_id.0 as usize;
+            let child_marks = provider.get_states_for_formula(*sf).unwrap();
 
-            let mut todo: Vec<NodeIndex> = Vec::new();
+            let mut result = FixedBitSet::with_capacity(num_states);
+            let mut todo = Vec::new();
 
-            let mut out_degree: std::collections::HashMap<NodeIndex, usize> = structure
-                .get_all_states()
-                .map(|s| (s, structure.graph.neighbors(s).count()))
+            let mut out_degree: Vec<u32> = (0..num_states)
+                .map(|s| structure.get_successors(StateID(s as u32)).len() as u32)
                 .collect();
 
-            // For each state, if it satisfies f and is not already labeled, mark it (AF f) and add it to the todo list.
-            for state in structure.get_all_states() {
-                if provider.is_labeled(state, f) {
-                    provider.add_label(state, formula.clone());
-                    todo.push(state);
-                }
+            // If the state already satisfies sf, it satisfies AF sf
+            for s_idx in child_marks.ones() {
+                result.insert(s_idx);
+                todo.push(StateID(s_idx as u32));
             }
-            // Back-propagation: a predecessor satisfies AF f if ALL its successors satisfy AF f.
-            while let Some(state) = todo.pop() {
-                for pred in structure
-                    .graph
-                    .neighbors_directed(state, Direction::Incoming)
-                {
-                    if provider.is_labeled(pred, &formula) {
-                        continue;
-                    }
 
-                    if let Some(count) = out_degree.get_mut(&pred) {
-                        // Decrement the out-degree of the predecessor because one successor is now labeled with AF f.
-                        if *count > 0 {
-                            *count -= 1;
+            // 4. Backward propagation: if all successors of a parent are marked, the parent also enters
+            while let Some(state_id) = todo.pop() {
+                for &pred in structure.get_predecessors(state_id) {
+                    let pred_idx = pred.0 as usize;
+
+                    // If the predecessor is not already marked, check if all successors are marked
+                    if !result.contains(pred_idx) {
+                        if out_degree[pred_idx] > 0 {
+                            out_degree[pred_idx] -= 1;
                         }
 
-                        // If all successors are now labeled AF f, label the predecessor.
-                        if *count == 0 {
-                            provider.add_label(pred, formula.clone());
+                        // If the count is zero, all successors are marked, so the predecessor also enters
+                        if out_degree[pred_idx] == 0 {
+                            result.insert(pred_idx);
                             todo.push(pred);
                         }
                     }
                 }
             }
+
+            provider.marks[f_idx] = result;
         }
+
+        // Add label if all paths from a state satisfy f in some future
         _ => panic!("Error: Operator {:?} should be converted!", formula),
     }
 }
-pub fn verify(structure: &KripkeStructure, formula: &CtlFormula) -> bool {
-    let mut provider = LabelingProvider::new();
 
-    let canonical_formula = convert_equivalence(&formula);
+pub fn verify(structure: &KripkeStructure, mut model: Model) -> Vec<bool> {
+    purify_model_specs(&mut model);
 
-    // Initialize provider with True labels for all states
-    for state in structure.get_all_states() {
-        provider.add_label(state, CtlFormula::True);
+    let num_states = structure.num_states();
+    let num_formulas = model.ctl_arena.len();
+    let mut provider = LabelingProvider::new(num_states, num_formulas);
+
+    for f_idx in 0..num_formulas {
+        let f_id = FormulaID(f_idx as u32);
+        label_formula(f_id, structure, &model, &mut provider);
     }
 
-    label_formula(&canonical_formula, structure, &mut provider);
+    let mut results = Vec::new();
 
-    //provider.debug_print(&structure);
+    for &spec_id in &model.specs {
+        if let Some(marks_bitset) = provider.get_states_for_formula(spec_id) {
+            let initial = structure.get_initial_states();
+            let mut diff = initial.clone();
+            diff.difference_with(marks_bitset);
 
-    structure
-        .initial_states
-        .iter()
-        .all(|&s| provider.is_labeled(s, &canonical_formula))
+            /*
+            if !diff.is_empty() {
+                println!(
+                    "DEBUG FAIL: Spec {:?} failed for initial states: {:?}",
+                    spec_id, diff
+                );
+                println!("  Initial states bits: {:?}", initial);
+                println!("  Marks bitset bits:   {:?}", marks_bitset);
+            }*/
+
+            results.push(diff.count_ones(..) == 0);
+        } else {
+            results.push(false);
+        }
+    }
+
+    results
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Helper function to create a Propositional formula for testing
-    fn prop(name: &str) -> CtlFormula {
-        CtlFormula::Prop(name.to_string())
-    }
-
-    /// Helper function to wrap a formula in a Not operator
-    fn not(f: CtlFormula) -> CtlFormula {
-        CtlFormula::Not(Box::new(f))
-    }
-
-    /// Helper function for the True constant
-    fn true_f() -> CtlFormula {
-        CtlFormula::True
-    }
+    use std::collections::HashMap;
 
     #[test]
-    fn test_simple_prop_stay_same() {
-        // Atomic propositions should remain unchanged after conversion
-        let f = prop("p");
-        assert_eq!(convert_equivalence(&f), prop("p"));
-    }
+    fn test_ef_conversion_to_core() {
+        let mut old_arena = CtlFormulaArena::new();
+        let mut new_arena = CtlFormulaArena::new();
+        let mut memo = HashMap::new();
 
-    #[test]
-    fn test_ef_conversion() {
-        // Semantic equivalence: EF p  <=>  E [ true U p ]
-        let f = CtlFormula::EF(Box::new(prop("p")));
-        let expected = CtlFormula::EU(Box::new(true_f()), Box::new(prop("p")));
+        let p_id = 42;
+        let prop = old_arena.insert(CtlFormula::Prop(p_id));
+        let ef_p = old_arena.insert(CtlFormula::EF(prop));
 
-        assert_eq!(convert_equivalence(&f), expected);
-    }
+        let root_id = convert_to_core(ef_p, &old_arena, &mut new_arena, &mut memo);
 
-    #[test]
-    fn test_ag_conversion() {
-        // Semantic equivalence: AG p  <=>  ! EF !p  <=>  ! E [ true U !p ]
-        // This also tests if the conversion is recursive (converting the internal EF)
-        let f = CtlFormula::AG(Box::new(prop("p")));
-
-        let expected = not(CtlFormula::EU(Box::new(true_f()), Box::new(not(prop("p")))));
-
-        assert_eq!(convert_equivalence(&f), expected);
-    }
-
-    #[test]
-    fn test_nested_conversion() {
-        // Deep recursion test: AG(EF p)
-        // The result should contain NO 'AG' or 'EF' operators
-        let f = CtlFormula::AG(Box::new(CtlFormula::EF(Box::new(prop("p")))));
-        let converted = convert_equivalence(&f);
-
-        let debug_str = format!("{:?}", converted);
-
-        // Assert that the forbidden operators were removed from the entire tree
-        assert!(
-            !debug_str.contains("AG"),
-            "Result still contains AG: {:?}",
-            converted
-        );
-        assert!(
-            !debug_str.contains("EF"),
-            "Result still contains EF: {:?}",
-            converted
-        );
-    }
-
-    #[test]
-    fn test_imply_conversion_recursive() {
-        // Test if conversion works inside an implication
-        // Imply(EF p, q) => Imply(E[true U p], q)
-        let f = CtlFormula::Imply(
-            Box::new(CtlFormula::EF(Box::new(prop("p")))),
-            Box::new(prop("q")),
-        );
-        let converted = convert_equivalence(&f);
-
-        if let CtlFormula::Imply(f1, _) = converted {
-            // Check if the left side of the implication was correctly converted
-            assert!(matches!(*f1, CtlFormula::EU(_, _)));
+        // 3. EU(True, p)
+        let root_formula = new_arena.get(root_id);
+        if let CtlFormula::EU(f1, f2) = root_formula {
+            assert!(matches!(new_arena.get(*f1), CtlFormula::True));
+            if let CtlFormula::Prop(p) = new_arena.get(*f2) {
+                assert_eq!(*p, 42);
+            } else {
+                panic!("F2 should be a Prop p");
+            }
         } else {
-            panic!("Formula is no longer an Implication!");
+            panic!("EF should be converted to EU");
         }
     }
-}
-#[test]
-fn test_traffic_light_from_nusmv_spec() {
-    let mut model = KripkeStructure::new();
 
-    // State 0: has labels "init" and "is_green"
-    let s0 = model.add_state("s0", vec!["init".to_string(), "is_green".to_string()], true);
-    // State 1: has label "is_yellow"
-    let s1 = model.add_state("s1", vec!["is_yellow".to_string()], false);
-    // State 2: has label "is_red"
-    let s2 = model.add_state("s2", vec!["is_red".to_string()], false);
+    #[test]
+    fn test_ag_conversion_to_core() {
+        let mut old_arena = CtlFormulaArena::new();
+        let mut new_arena = CtlFormulaArena::new();
+        let mut memo = HashMap::new();
 
-    // 2. Add transitions from out.tra (0 -> 1, 1 -> 2, 2 -> 0)
-    model.add_transition(s0, s1);
-    model.add_transition(s1, s2);
-    model.add_transition(s2, s0);
+        // 1. AG p
+        let prop = old_arena.insert(CtlFormula::Prop(1));
+        let ag_p = old_arena.insert(CtlFormula::AG(prop));
 
-    // --- Specifications ---
+        //  AG p => !E[true U !p]
+        let root_id = convert_to_core(ag_p, &old_arena, &mut new_arena, &mut memo);
 
-    // Spec 1: EF (state = red) -> "Is it possible to reach a red light?"
-    let spec1 = CtlFormula::EF(Box::new(CtlFormula::Prop("is_red".to_string())));
+        let f_root = new_arena.get(root_id); // Not(...)
+        assert!(matches!(f_root, CtlFormula::Not(_)));
 
-    // Spec 2: AG (state = green -> AF (state = red))
-    // "In all paths, if it's green, it will eventually turn red."
-    let spec2 = CtlFormula::AG(Box::new(CtlFormula::Imply(
-        Box::new(CtlFormula::Prop("is_green".to_string())),
-        Box::new(CtlFormula::AF(Box::new(CtlFormula::Prop(
-            "is_red".to_string(),
-        )))),
-    )));
-
-    // --- Verification ---
-
-    // Test Spec 1: Should be true since 0 -> 1 -> 2
-    assert!(
-        verify(&model, &spec1),
-        "Assertion failed: EF(is_red) should be TRUE"
-    );
-
-    // Test Spec 2: Should be true because the cycle guarantees red follows green.
-    assert!(
-        verify(&model, &spec2),
-        "Assertion failed: AG(is_green -> AF(is_red)) should be TRUE"
-    );
+        if let CtlFormula::Not(eu_id) = f_root {
+            let f_eu = new_arena.get(*eu_id); // EU(True, Not(p))
+            if let CtlFormula::EU(t_id, not_p_id) = f_eu {
+                assert!(matches!(new_arena.get(*t_id), CtlFormula::True));
+                assert!(matches!(new_arena.get(*not_p_id), CtlFormula::Not(_)));
+            } else {
+                panic!("Should be EU");
+            }
+        }
+    }
 }

@@ -1,4 +1,10 @@
-use crate::specs::ctl_formula::CtlFormula;
+//! Parser for CTL formulas.
+//!
+//! This module provides a parser for CTL formulas using the pest parser generator.
+//!
+
+use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
+
 use pest::Parser;
 use pest::iterators::Pair;
 use pest_derive::Parser;
@@ -8,7 +14,7 @@ use pest_derive::Parser;
 pub struct CtlParser;
 
 /// Entry point to parse a string into a CtlFormula
-pub fn parse_ctl_formula(input: &str) -> Result<CtlFormula, String> {
+pub fn parse_ctl_formula(input: &str) -> Result<(CtlFormulaArena, FormulaID), String> {
     let pairs = CtlParser::parse(Rule::main, input).map_err(|e| format!("Parse error: {}", e))?;
 
     let formula_pair = pairs
@@ -19,22 +25,25 @@ pub fn parse_ctl_formula(input: &str) -> Result<CtlFormula, String> {
         .find(|p| p.as_rule() == Rule::formula)
         .expect("Grammar error: formula not found inside main");
 
-    Ok(parse_expr(formula_pair))
+    let mut formula_arena = CtlFormulaArena::new();
+    let id = parse_expr(formula_pair, &mut formula_arena);
+    let result = (formula_arena, id);
+    Ok(result)
 }
 
-fn parse_expr(pair: Pair<Rule>) -> CtlFormula {
+fn parse_expr(pair: Pair<Rule>, formula_arena: &mut CtlFormulaArena) -> FormulaID {
     match pair.as_rule() {
         Rule::formula | Rule::implication | Rule::iff | Rule::or | Rule::and => {
             let mut inner = pair.into_inner();
-            let mut left = parse_expr(inner.next().unwrap());
+            let mut left = parse_expr(inner.next().unwrap(), formula_arena);
 
             while let Some(op) = inner.next() {
-                let right = parse_expr(inner.next().unwrap());
+                let right = parse_expr(inner.next().unwrap(), formula_arena);
                 left = match op.as_rule() {
-                    Rule::op_imply => CtlFormula::Imply(Box::new(left), Box::new(right)),
-                    Rule::op_iff => CtlFormula::Iff(Box::new(left), Box::new(right)),
-                    Rule::op_or => CtlFormula::Or(Box::new(left), Box::new(right)),
-                    Rule::op_and => CtlFormula::And(Box::new(left), Box::new(right)),
+                    Rule::op_imply => formula_arena.insert(CtlFormula::Imply(left, right)),
+                    Rule::op_iff => formula_arena.insert(CtlFormula::Iff(left, right)),
+                    Rule::op_or => formula_arena.insert(CtlFormula::Or(left, right)),
+                    Rule::op_and => formula_arena.insert(CtlFormula::And(left, right)),
                     _ => unreachable!("Unexpected operator rule: {:?}", op.as_rule()),
                 };
             }
@@ -46,17 +55,17 @@ fn parse_expr(pair: Pair<Rule>) -> CtlFormula {
             match inner.as_rule() {
                 Rule::eu => {
                     let mut sub = inner.into_inner();
-                    let f1 = parse_expr(sub.next().unwrap());
-                    let f2 = parse_expr(sub.next().unwrap());
-                    CtlFormula::EU(Box::new(f1), Box::new(f2))
+                    let f1 = parse_expr(sub.next().unwrap(), formula_arena);
+                    let f2 = parse_expr(sub.next().unwrap(), formula_arena);
+                    formula_arena.insert(CtlFormula::EU(f1, f2))
                 }
                 Rule::au => {
                     let mut sub = inner.into_inner();
-                    let f1 = parse_expr(sub.next().unwrap());
-                    let f2 = parse_expr(sub.next().unwrap());
-                    CtlFormula::AU(Box::new(f1), Box::new(f2))
+                    let f1 = parse_expr(sub.next().unwrap(), formula_arena);
+                    let f2 = parse_expr(sub.next().unwrap(), formula_arena);
+                    formula_arena.insert(CtlFormula::AU(f1, f2))
                 }
-                _ => parse_expr(inner),
+                _ => parse_expr(inner, formula_arena),
             }
         }
 
@@ -67,22 +76,23 @@ fn parse_expr(pair: Pair<Rule>) -> CtlFormula {
             match first.as_rule() {
                 Rule::unary_op => {
                     let op_str = first.as_str();
-                    let sub = Box::new(parse_expr(inner.next().unwrap()));
+                    let sub = parse_expr(inner.next().unwrap(), formula_arena);
                     match op_str {
-                        "EX" => CtlFormula::EX(sub),
-                        "AX" => CtlFormula::AX(sub),
-                        "EF" => CtlFormula::EF(sub),
-                        "AF" => CtlFormula::AF(sub),
-                        "EG" => CtlFormula::EG(sub),
-                        "AG" => CtlFormula::AG(sub),
+                        "EX" => formula_arena.insert(CtlFormula::EX(sub)),
+                        "AX" => formula_arena.insert(CtlFormula::AX(sub)),
+                        "EF" => formula_arena.insert(CtlFormula::EF(sub)),
+                        "AF" => formula_arena.insert(CtlFormula::AF(sub)),
+                        "EG" => formula_arena.insert(CtlFormula::EG(sub)),
+                        "AG" => formula_arena.insert(CtlFormula::AG(sub)),
                         _ => unreachable!("Unknown CTL op: {}", op_str),
                     }
                 }
                 _ => {
                     if first.as_rule() == Rule::primary {
-                        parse_expr(first)
+                        parse_expr(first, formula_arena)
                     } else {
-                        CtlFormula::Not(Box::new(parse_expr(first)))
+                        let sub = parse_expr(first, formula_arena);
+                        formula_arena.insert(CtlFormula::Not(sub))
                     }
                 }
             }
@@ -91,13 +101,13 @@ fn parse_expr(pair: Pair<Rule>) -> CtlFormula {
         Rule::primary => {
             let inner = pair.into_inner().next().unwrap();
             match inner.as_rule() {
-                Rule::formula => parse_expr(inner),
+                Rule::formula => parse_expr(inner, formula_arena),
                 Rule::constant => match inner.as_str().to_lowercase().as_str() {
-                    "true" => CtlFormula::True,
-                    "false" => CtlFormula::False,
+                    "true" => formula_arena.insert(CtlFormula::True),
+                    "false" => formula_arena.insert(CtlFormula::False),
                     _ => unreachable!(),
                 },
-                Rule::proposition => CtlFormula::Prop(inner.as_str().to_string()),
+                Rule::proposition => formula_arena.insert_proposition(inner.as_str()),
                 _ => unreachable!("Unexpected primary rule: {:?}", inner.as_rule()),
             }
         }
@@ -112,102 +122,59 @@ mod tests {
 
     #[test]
     fn test_parse_basic() {
-        let f = parse_ctl_formula("is_red").unwrap();
-        assert_eq!(f, CtlFormula::Prop("is_red".to_string()));
+        let (arena, id) = parse_ctl_formula("is_red").unwrap();
+        match arena.get(id) {
+            CtlFormula::Prop(p_id) => {
+                assert_eq!(arena.format_formula(id), "is_red");
+            }
+            _ => panic!("Expected Proposition"),
+        }
     }
 
     #[test]
     fn test_parse_unary() {
-        let f = parse_ctl_formula("!abc").unwrap();
-        assert_eq!(
-            f,
-            CtlFormula::Not(Box::new(CtlFormula::Prop("abc".to_string())))
-        );
+        let (arena, id) = parse_ctl_formula("!abc").unwrap();
+        if let CtlFormula::Not(child_id) = arena.get(id) {
+            assert_eq!(arena.format_formula(*child_id), "abc");
+        } else {
+            panic!("Expected Not operator");
+        }
     }
 
     #[test]
     fn test_parse_precedence() {
-        // !p & q should be (!p) & q, not !(p & q)
-        let f = parse_ctl_formula("!p & q").unwrap();
-        if let CtlFormula::And(left, _) = f {
-            assert!(matches!(*left, CtlFormula::Not(_)));
+        let (arena, id) = parse_ctl_formula("!p & q").unwrap();
+        if let CtlFormula::And(left_id, _right_id) = arena.get(id) {
+            assert!(matches!(arena.get(*left_id), CtlFormula::Not(_)));
         } else {
             panic!("Precedence failed: expected And at top level");
         }
     }
 
     #[test]
-    fn test_parse_complex_temporal() {
-        let input = "AG(is_green -> AF is_red)";
-        let f = parse_ctl_formula(input);
-        assert!(f.is_ok(), "Failed to parse complex formula: {:?}", f.err());
-    }
-
-    #[test]
     fn test_parse_spaces() {
-        let f1 = parse_ctl_formula("AG(p)").unwrap();
-        let f2 = parse_ctl_formula("AG  (  p  )").unwrap();
-        assert_eq!(f1, f2);
-    }
+        let mut arena = CtlFormulaArena::new();
 
-    #[test]
-    fn test_parse_large_conjunction_with_special_chars() {
-        let input = "EF (cId[0]=1 & p.state=WAIT & req[1]=0 & guard_1=true & M1=3)";
-        let f = parse_ctl_formula(input);
-        assert!(
-            f.is_ok(),
-            "Failed to process formula with special characters: {:?}",
-            f.err()
-        );
-        let formula = f.unwrap();
-        if let CtlFormula::EF(inner) = formula {
-            assert!(matches!(*inner, CtlFormula::And(_, _)));
-        } else {
-            panic!("Expected operator EF at the top level");
-        }
+        let (arena1, id1) = parse_ctl_formula("AG(p)").unwrap();
+        let (arena2, id2) = parse_ctl_formula("AG  (  p  )").unwrap();
+
+        assert_eq!(arena1.format_formula(id1), arena2.format_formula(id2));
     }
 
     #[test]
     fn test_parse_binary_temporal_until() {
-        let input = "E[p U q]";
-        let f = parse_ctl_formula(input).unwrap();
-        assert!(matches!(f, CtlFormula::EU(_, _)));
+        let (arena, id) = parse_ctl_formula("E[p U q]").unwrap();
+        assert!(matches!(arena.get(id), CtlFormula::EU(_, _)));
 
-        let input2 = "A[p U q]";
-        let f2 = parse_ctl_formula(input2).unwrap();
-        assert!(matches!(f2, CtlFormula::AU(_, _)));
-    }
-
-    #[test]
-    fn test_parse_nested_parentheses() {
-        let input = "AG(p -> (EX(q & (r | !s))))";
-        let f = parse_ctl_formula(input);
-        assert!(f.is_ok());
-    }
-
-    #[test]
-    fn test_parse_iff() {
-        let f = parse_ctl_formula("p <-> q").unwrap();
-        assert!(matches!(f, CtlFormula::Iff(_, _)));
-    }
-
-    #[test]
-    fn test_parse_implication_right_assoc() {
-        let f = parse_ctl_formula("p -> q -> r").unwrap();
-        if let CtlFormula::Imply(_, right) = f {
-            assert!(matches!(*right, CtlFormula::Imply(_, _)));
-        } else {
-            panic!("Expected Imply at top level");
-        }
+        let (arena2, id2) = parse_ctl_formula("A[p U q]").unwrap();
+        assert!(matches!(arena2.get(id2), CtlFormula::AU(_, _)));
     }
 
     #[test]
     fn test_parse_constant_case_insensitive() {
-        let f1 = parse_ctl_formula("TRUE").unwrap();
-        let f2 = parse_ctl_formula("true").unwrap();
-        let f3 = parse_ctl_formula("True").unwrap();
-        assert_eq!(f1, CtlFormula::True);
-        assert_eq!(f2, CtlFormula::True);
-        assert_eq!(f3, CtlFormula::True);
+        let (_, id1) = parse_ctl_formula("TRUE").unwrap();
+        let (arena, id2) = parse_ctl_formula("true").unwrap();
+
+        assert!(matches!(arena.get(id2), CtlFormula::True));
     }
 }

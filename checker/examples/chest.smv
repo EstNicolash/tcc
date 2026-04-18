@@ -5,12 +5,12 @@ VAR
 	trapped: boolean;
 	inventory: {empty, key, disarmer, treasure};
 	action: {idle, pick_up, use_item};
-	hp: 0..3;
+	hp: 0..10000;
 	gamestate: {running, solved, lost};
 
 ASSIGN
 	init(gamestate) := running;
-	init(hp) := 3;
+	init(hp) := 10000;
 	init(locked) := TRUE;
 	init(trapped) := TRUE;
 	init(inventory) := empty;
@@ -117,3 +117,6 @@ CTLSPEC AG (!trapped -> AG !trapped)
 
 -- 12)
 CTLSPEC EF (gamestate = solved & hp = 0)
+
+-- 13) Exemplo falso: Impossível perder
+CTLSPEC ! EF (gamestate = lost)

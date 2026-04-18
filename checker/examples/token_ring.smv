@@ -1,0 +1,130 @@
+MODULE main
+
+VAR
+  token : 1..10;
+
+  s1 : {n, t, c};
+  s2 : {n, t, c};
+  s3 : {n, t, c};
+  s4 : {n, t, c};
+  s5 : {n, t, c};
+  s6 : {n, t, c};
+  s7 : {n, t, c};
+  s8 : {n, t, c};
+  s9 : {n, t, c};
+  s10 : {n, t, c};
+
+ASSIGN
+  init(token) := 1;
+
+  init(s1) := n;
+  init(s2) := n;
+  init(s3) := n;
+  init(s4) := n;
+  init(s5) := n;
+  init(s6) := n;
+  init(s7) := n;
+  init(s8) := n;
+  init(s9) := n;
+  init(s10) := n;
+
+  next(token) := case
+    token = 1 & s1 = n : 2;
+    token = 2 & s2 = n : 3;
+    token = 3 & s3 = n : 4;
+    token = 4 & s4 = n : 5;
+    token = 5 & s5 = n : 6;
+    token = 6 & s6 = n : 7;
+    token = 7 & s7 = n : 8;
+    token = 8 & s8 = n : 9;
+    token = 9 & s9 = n : 10;
+    token = 10 & s10 = n : 1;
+    TRUE : token;
+  esac;
+
+  next(s1) := case
+    s1 = n : {n, t};
+    s1 = t & token = 1 : c;
+    s1 = c : {c, n};
+    TRUE : s1;
+  esac;
+
+  next(s2) := case
+    s2 = n : {n, t};
+    s2 = t & token = 2 : c;
+    s2 = c : {c, n};
+    TRUE : s2;
+  esac;
+
+  next(s3) := case
+    s3 = n : {n, t};
+    s3 = t & token = 3 : c;
+    s3 = c : {c, n};
+    TRUE : s3;
+  esac;
+
+  next(s4) := case
+    s4 = n : {n, t};
+    s4 = t & token = 4 : c;
+    s4 = c : {c, n};
+    TRUE : s4;
+  esac;
+
+  next(s5) := case
+    s5 = n : {n, t};
+    s5 = t & token = 5 : c;
+    s5 = c : {c, n};
+    TRUE : s5;
+  esac;
+
+  next(s6) := case
+    s6 = n : {n, t};
+    s6 = t & token = 6 : c;
+    s6 = c : {c, n};
+    TRUE : s6;
+  esac;
+
+  next(s7) := case
+    s7 = n : {n, t};
+    s7 = t & token = 7 : c;
+    s7 = c : {c, n};
+    TRUE : s7;
+  esac;
+
+  next(s8) := case
+    s8 = n : {n, t};
+    s8 = t & token = 8 : c;
+    s8 = c : {c, n};
+    TRUE : s8;
+  esac;
+
+  next(s9) := case
+    s9 = n : {n, t};
+    s9 = t & token = 9 : c;
+    s9 = c : {c, n};
+    TRUE : s9;
+  esac;
+
+  next(s10) := case
+    s10 = n : {n, t};
+    s10 = t & token = 10 : c;
+    s10 = c : {c, n};
+    TRUE : s10;
+  esac;
+
+-- ESPECIFICAÇÕES CTL
+
+-- 1. Safety
+CTLSPEC AG !(s1 = c & s5 = c)
+
+-- 2. Liveness
+CTLSPEC AG (s3 = t -> AF (s3 = c))
+
+-- 3. Sanity Check
+CTLSPEC EF (s1 = n & s2 = n & s3 = n & s4 = n & s5 = n & s6 = n & s7 = n & s8 = n & s9 = n & s10 = n)
+
+-- 4. Propriedade do Token
+CTLSPEC AG ((s10 = c) -> !(EX (token = 1)))
+
+-- 5. Falsificação (Deve ser FALSE)
+CTLSPEC EF (token = 2 & s2 = c)
