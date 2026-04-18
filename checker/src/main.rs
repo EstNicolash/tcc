@@ -21,18 +21,16 @@ fn main() {
             format,
             algorithm,
         } => {
-            //run_verification(model_path, spec_path, format, algorithm);
+            run_verification(model_path, spec_path, format, algorithm);
         }
-
         Commands::TestParser { input_file, output } => {
             run_parser_test(input_file, output);
         }
     }
 }
-/*
 fn run_verification(
     model_path: String,
-    spec_path: String,
+    _spec_path: String,
     format: InputFormat,
     algorithm: Algorithm,
 ) {
@@ -41,54 +39,68 @@ fn run_verification(
         format!("--- Model Checker (Verify): {} ---", model_path.bold()).blue()
     );
 
-    let mut formulas = vec![];
-
-    let model = match format {
-        InputFormat::Pnml => {
-            let fsm_path = model_path.replace(".pnml", ".fsm");
-            io::load_pnml_fsm::load_pnml_fsm(&fsm_path, &model_path)
-        }
-        InputFormat::Prism => {
-            let fsm_path = model_path.replace(".prism", ".fsm");
-            io::load_prism_fsm::load_prism_fsm(&fsm_path, &model_path)
-        }
-        InputFormat::Ssmv => fs::read_to_string(&model_path)
-            .map_err(|e| format!("Failed to read file: {}", e))
-            .and_then(|content| modeling::ssmv_parser::parse_ssmv(&content))
-            .map(|ast| {
-                let symbolic_model = modeling::symbolic::build_model(ast);
-
-                formulas.extend(symbolic_model.specs.clone());
-
-                modeling::expansion::expand_to_kripke(&symbolic_model)
-            }),
-    }
-    .unwrap_or_else(|e| {
-        eprintln!("{} {}", "Error loading model:".red().bold(), e);
+    let input_content = fs::read_to_string(&model_path).unwrap_or_else(|e| {
+        eprintln!("{} {}", "Error reading file:".red().bold(), e);
         process::exit(1);
     });
 
-    if formulas.is_empty() {
-        formulas = io::load_formulas::load_formulas(&spec_path).unwrap_or_else(|e| {
-            eprintln!("{} {}", "Error loading formulas:".red().bold(), e);
+    let (ks, model, formula_strings) = match format {
+        InputFormat::Pnml => {
+            eprintln!(
+                "{} The PNML parser has not yet been adapted for the new Arenas architecture.",
+                "Not Implemented:".red().bold()
+            );
             process::exit(1);
-        });
-    }
+        }
+        InputFormat::Prism => {
+            eprintln!(
+                "{} The Prism parser has not yet been adapted for the new Arenas architecture.",
+                "Not Implemented:".red().bold()
+            );
+            process::exit(1);
+        }
+        InputFormat::Ssmv => {
+            let ast = modeling::ssmv_parser::parse_ssmv(&input_content).unwrap_or_else(|e| {
+                eprintln!("{} {}", "SSMV Parser Error:".red().bold(), e);
+                process::exit(1);
+            });
+
+            let mut strings = Vec::new();
+            for &spec_id in &ast.specifications {
+                let formatted = ast
+                    .ctl_arena
+                    .format_formula(spec_id, &|expr_id| ast.arena.format_expr(expr_id));
+                strings.push(formatted);
+            }
+
+            let symbolic_model = modeling::symbolic::build_model(ast);
+            let structure = modeling::expansion::expand_to_kripke(&symbolic_model);
+
+            (structure, symbolic_model, strings)
+        }
+    };
+
+    let num_states = ks.num_states();
+    let num_specs = model.specs.len();
 
     println!(
         "{} Model loaded via {:?} ({} states). {} formulas found.\n",
         "✔".green(),
         format,
-        model.graph.node_count(),
-        formulas.len()
+        num_states,
+        num_specs
     );
 
-    for (i, phi) in formulas.iter().enumerate() {
-        let is_valid = match algorithm {
-            Algorithm::Labelling => algorithms::labelling::verify(&model, phi),
-        };
+    if num_specs == 0 {
+        println!("{}", "No CTL formula found to verify. Exiting.".yellow());
+        return;
+    }
 
-        let result_text = if is_valid {
+    let results = match algorithm {
+        Algorithm::Labelling => algorithms::labelling::verify(&ks, model),
+    };
+    for (i, result) in results.into_iter().enumerate() {
+        let result_text = if result {
             "TRUE".green().bold()
         } else {
             "FALSE".red().bold()
@@ -98,12 +110,12 @@ fn run_verification(
             "{:>2}. [{}] {}\n    └─ Result: {}",
             i + 1,
             "CTL".yellow(),
-            phi,
+            formula_strings[i].cyan(),
             result_text
         );
     }
 }
-*/
+
 fn run_parser_test(input_file: String, output: Option<String>) {
     println!("{}", "--- Mode: SSMV Parser Test ---".yellow().bold());
 
