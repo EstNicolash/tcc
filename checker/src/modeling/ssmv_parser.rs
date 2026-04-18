@@ -76,7 +76,7 @@ fn parse_module(pair: Pair<Rule>) -> SsmvModel {
                     .into_inner()
                     .find(|p| p.as_rule() == Rule::formula)
                     .expect("Grammar error: formula not found inside CTLSPEC");
-                specifications.push(parse_ctl(formula_pair, &mut ctl_arena));
+                specifications.push(parse_ctl(formula_pair, &mut ctl_arena, &mut ssmv_arena));
             }
             _ => {}
         }
@@ -266,23 +266,19 @@ fn parse_primary(pair: Pair<Rule>, arena: &mut SsmvArena) -> ExprID {
     }
 }
 
-/// Version of `parse_primary` that accepts any rule of expression (used in Set)
-fn parse_primary_from(pair: Pair<Rule>, ssmv_arena: &mut SsmvArena) -> ExprID {
-    match pair.as_rule() {
-        Rule::ssmv_primary => parse_primary(pair, ssmv_arena),
-        _ => parse_expr(pair, ssmv_arena),
-    }
-}
-
 /// For CTL expressions, parses the operator and operands and returns a `CtlFormula`.
-fn parse_ctl(pair: Pair<Rule>, formula_arena: &mut CtlFormulaArena) -> FormulaID {
+fn parse_ctl(
+    pair: Pair<Rule>,
+    formula_arena: &mut CtlFormulaArena<ExprID>,
+    ssmv_arena: &mut SsmvArena,
+) -> FormulaID {
     match pair.as_rule() {
         Rule::formula | Rule::implication | Rule::iff | Rule::or | Rule::and => {
             let mut inner = pair.into_inner();
-            let mut left = parse_ctl(inner.next().unwrap(), formula_arena);
+            let mut left = parse_ctl(inner.next().unwrap(), formula_arena, ssmv_arena);
 
             while let Some(op) = inner.next() {
-                let right = parse_ctl(inner.next().unwrap(), formula_arena);
+                let right = parse_ctl(inner.next().unwrap(), formula_arena, ssmv_arena);
                 left = match op.as_rule() {
                     Rule::op_imply => formula_arena.insert(CtlFormula::Imply(left, right)),
                     Rule::op_iff => formula_arena.insert(CtlFormula::Iff(left, right)),
@@ -299,17 +295,17 @@ fn parse_ctl(pair: Pair<Rule>, formula_arena: &mut CtlFormulaArena) -> FormulaID
             match inner.as_rule() {
                 Rule::eu => {
                     let mut sub = inner.into_inner();
-                    let f1 = parse_ctl(sub.next().unwrap(), formula_arena);
-                    let f2 = parse_ctl(sub.next().unwrap(), formula_arena);
+                    let f1 = parse_ctl(sub.next().unwrap(), formula_arena, ssmv_arena);
+                    let f2 = parse_ctl(sub.next().unwrap(), formula_arena, ssmv_arena);
                     formula_arena.insert(CtlFormula::EU(f1, f2))
                 }
                 Rule::au => {
                     let mut sub = inner.into_inner();
-                    let f1 = parse_ctl(sub.next().unwrap(), formula_arena);
-                    let f2 = parse_ctl(sub.next().unwrap(), formula_arena);
+                    let f1 = parse_ctl(sub.next().unwrap(), formula_arena, ssmv_arena);
+                    let f2 = parse_ctl(sub.next().unwrap(), formula_arena, ssmv_arena);
                     formula_arena.insert(CtlFormula::AU(f1, f2))
                 }
-                _ => parse_ctl(inner, formula_arena),
+                _ => parse_ctl(inner, formula_arena, ssmv_arena),
             }
         }
 
@@ -320,7 +316,7 @@ fn parse_ctl(pair: Pair<Rule>, formula_arena: &mut CtlFormulaArena) -> FormulaID
             match first.as_rule() {
                 Rule::unary_op => {
                     let op_str = first.as_str();
-                    let sub = parse_ctl(inner.next().unwrap(), formula_arena);
+                    let sub = parse_ctl(inner.next().unwrap(), formula_arena, ssmv_arena);
                     match op_str {
                         "EX" => formula_arena.insert(CtlFormula::EX(sub)),
                         "AX" => formula_arena.insert(CtlFormula::AX(sub)),
@@ -333,9 +329,9 @@ fn parse_ctl(pair: Pair<Rule>, formula_arena: &mut CtlFormulaArena) -> FormulaID
                 }
                 _ => {
                     if first.as_rule() == Rule::primary {
-                        parse_ctl(first, formula_arena)
+                        parse_ctl(first, formula_arena, ssmv_arena)
                     } else {
-                        let sub = parse_ctl(first, formula_arena);
+                        let sub = parse_ctl(first, formula_arena, ssmv_arena);
                         formula_arena.insert(CtlFormula::Not(sub))
                     }
                 }
@@ -345,13 +341,19 @@ fn parse_ctl(pair: Pair<Rule>, formula_arena: &mut CtlFormulaArena) -> FormulaID
         Rule::primary => {
             let inner = pair.into_inner().next().unwrap();
             match inner.as_rule() {
-                Rule::formula => parse_ctl(inner, formula_arena),
+                Rule::formula => parse_ctl(inner, formula_arena, ssmv_arena),
                 Rule::constant => match inner.as_str().to_lowercase().as_str() {
                     "true" => formula_arena.insert(CtlFormula::True),
                     "false" => formula_arena.insert(CtlFormula::False),
                     _ => unreachable!(),
                 },
-                Rule::proposition => formula_arena.insert_proposition(inner.as_str()),
+                Rule::proposition => {
+                    let expr_pair = inner.into_inner().next().unwrap();
+
+                    let expr_id = parse_expr(expr_pair, ssmv_arena);
+
+                    formula_arena.insert(CtlFormula::Prop(expr_id))
+                }
                 _ => unreachable!("Unexpected primary rule: {:?}", inner.as_rule()),
             }
         }
