@@ -1,7 +1,7 @@
 use crate::modeling::ssmv_ast::{
     ExprID, IdentifierID, SsmvArena, SsmvAssignment, SsmvExpr, SsmvModel, SsmvType,
 };
-use crate::specs::ctl_formula::{CtlFormulaArena, FormulaID};
+use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -14,7 +14,7 @@ pub enum Value {
     Enum(usize),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SymbolicExpr {
     Literal(Value),
     Reference(usize),
@@ -28,6 +28,28 @@ pub struct SymbolicArena {
     pub expressions: Vec<SymbolicExpr>,
     pub case_buffer: Vec<(SymbolicExprID, SymbolicExprID)>,
     pub set_buffer: Vec<SymbolicExprID>,
+    expr_lookup: HashMap<SymbolicExpr, SymbolicExprID>,
+}
+
+impl SymbolicArena {
+    pub fn new() -> Self {
+        Self {
+            expressions: Vec::new(),
+            case_buffer: Vec::new(),
+            set_buffer: Vec::new(),
+            expr_lookup: HashMap::new(),
+        }
+    }
+
+    pub fn alloc_expr(&mut self, expr: SymbolicExpr) -> SymbolicExprID {
+        if let Some(&id) = self.expr_lookup.get(&expr) {
+            return id;
+        }
+        let id = SymbolicExprID(self.expressions.len() as u32);
+        self.expr_lookup.insert(expr.clone(), id);
+        self.expressions.push(expr);
+        id
+    }
 }
 
 pub struct Model {
@@ -37,10 +59,10 @@ pub struct Model {
     pub specs: Vec<FormulaID>,
     pub arena: SymbolicArena,
     pub ast_names: SsmvArena,
-    pub ctl_arena: CtlFormulaArena,
+    pub ctl_arena: CtlFormulaArena<SymbolicExprID>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
     And,
     Or,
@@ -57,7 +79,7 @@ pub enum BinaryOp {
     Div,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
     Not,
     Neg,
@@ -102,12 +124,127 @@ fn map_un_op(op: &str) -> UnaryOp {
     }
 }
 
-pub fn build_model(ast: SsmvModel) -> Model {
-    let mut sym_arena = SymbolicArena {
-        expressions: Vec::new(),
-        case_buffer: Vec::new(),
-        set_buffer: Vec::new(),
+fn translate_and_purify_ctl(
+    ast_f_id: FormulaID,
+    old_arena: &CtlFormulaArena<ExprID>,
+    new_arena: &mut CtlFormulaArena<SymbolicExprID>,
+    memo: &mut HashMap<FormulaID, FormulaID>,
+    ast_arena: &SsmvArena,
+    sym_arena: &mut SymbolicArena,
+    var_map: &HashMap<IdentifierID, usize>,
+    def_map: &HashMap<IdentifierID, ExprID>,
+    enum_map: &HashMap<IdentifierID, (usize, usize)>,
+) -> FormulaID {
+    if let Some(&new_id) = memo.get(&ast_f_id) {
+        return new_id;
+    }
+
+    let formula = old_arena.get(ast_f_id);
+
+    let mut conv = |f| {
+        translate_and_purify_ctl(
+            f, old_arena, new_arena, memo, ast_arena, sym_arena, var_map, def_map, enum_map,
+        )
     };
+
+    let new_id = match formula {
+        CtlFormula::Prop(ast_expr_id) => {
+            let mut stack = Vec::new();
+            let sym_expr_id = translate_expr(
+                *ast_expr_id,
+                ast_arena,
+                sym_arena,
+                var_map,
+                def_map,
+                enum_map,
+                &mut stack,
+            );
+            new_arena.insert(CtlFormula::Prop(sym_expr_id))
+        }
+
+        CtlFormula::EG(f) => {
+            let f_c = conv(*f);
+            let not_f = new_arena.insert(CtlFormula::Not(f_c));
+            let af_not_f = new_arena.insert(CtlFormula::AF(not_f));
+            new_arena.insert(CtlFormula::Not(af_not_f))
+        }
+        CtlFormula::AG(f) => {
+            let f_c = conv(*f);
+            let not_f = new_arena.insert(CtlFormula::Not(f_c));
+            let t_id = new_arena.insert(CtlFormula::True);
+            let eu = new_arena.insert(CtlFormula::EU(t_id, not_f));
+            new_arena.insert(CtlFormula::Not(eu))
+        }
+        CtlFormula::EF(f) => {
+            let f_c = conv(*f);
+            let t_id = new_arena.insert(CtlFormula::True);
+            new_arena.insert(CtlFormula::EU(t_id, f_c))
+        }
+        CtlFormula::AU(f1, f2) => {
+            let f1_c = conv(*f1);
+            let f2_c = conv(*f2);
+            let not_f1 = new_arena.insert(CtlFormula::Not(f1_c));
+            let not_f2 = new_arena.insert(CtlFormula::Not(f2_c));
+            let and_n1_n2 = new_arena.insert(CtlFormula::And(not_f1, not_f2));
+            let eu = new_arena.insert(CtlFormula::EU(not_f2, and_n1_n2));
+            let af_f2 = new_arena.insert(CtlFormula::AF(f2_c));
+            let not_af = new_arena.insert(CtlFormula::Not(af_f2));
+            let or_f = new_arena.insert(CtlFormula::Or(eu, not_af));
+            new_arena.insert(CtlFormula::Not(or_f))
+        }
+
+        CtlFormula::Not(f) => {
+            let c = conv(*f);
+            new_arena.insert(CtlFormula::Not(c))
+        }
+        CtlFormula::And(f1, f2) => {
+            let c1 = conv(*f1);
+            let c2 = conv(*f2);
+            new_arena.insert(CtlFormula::And(c1, c2))
+        }
+        CtlFormula::Or(f1, f2) => {
+            let c1 = conv(*f1);
+            let c2 = conv(*f2);
+            new_arena.insert(CtlFormula::Or(c1, c2))
+        }
+        CtlFormula::Imply(f1, f2) => {
+            let c1 = conv(*f1);
+            let c2 = conv(*f2);
+            new_arena.insert(CtlFormula::Imply(c1, c2))
+        }
+        CtlFormula::EX(f) => {
+            let c = conv(*f);
+            new_arena.insert(CtlFormula::EX(c))
+        }
+        CtlFormula::AX(f) => {
+            let c = conv(*f);
+            new_arena.insert(CtlFormula::AX(c))
+        }
+        CtlFormula::AF(f) => {
+            let c = conv(*f);
+            new_arena.insert(CtlFormula::AF(c))
+        }
+        CtlFormula::EU(f1, f2) => {
+            let c1 = conv(*f1);
+            let c2 = conv(*f2);
+            new_arena.insert(CtlFormula::EU(c1, c2))
+        }
+        CtlFormula::Iff(f1, f2) => {
+            let c1 = conv(*f1);
+            let c2 = conv(*f2);
+            new_arena.insert(CtlFormula::Iff(c1, c2))
+        }
+        CtlFormula::True => new_arena.insert(CtlFormula::True),
+        CtlFormula::False => new_arena.insert(CtlFormula::False),
+        _ => panic!("Unknown operator {:?}", formula),
+    };
+
+    memo.insert(ast_f_id, new_id);
+    new_id
+}
+
+pub fn build_model(ast: SsmvModel) -> Model {
+    let mut sym_arena = SymbolicArena::new();
 
     let (var_map, def_map, enum_map) = build_indices(&ast);
 
@@ -154,14 +291,33 @@ pub fn build_model(ast: SsmvModel) -> Model {
         })
         .collect();
 
+    let mut sym_ctl_arena = CtlFormulaArena::new();
+    let mut memo = HashMap::new();
+    let mut sym_specs = Vec::new();
+
+    for &ast_spec_id in &ast.specifications {
+        let sym_spec_id = translate_and_purify_ctl(
+            ast_spec_id,
+            &ast.ctl_arena,
+            &mut sym_ctl_arena,
+            &mut memo,
+            &ast.arena,
+            &mut sym_arena,
+            &var_map,
+            &def_map,
+            &enum_map,
+        );
+        sym_specs.push(sym_spec_id);
+    }
+
     Model {
         variables,
         init_assignments,
         next_assignments,
-        specs: ast.specifications,
+        specs: sym_specs,
         arena: sym_arena,
         ast_names: ast.arena,
-        ctl_arena: ast.ctl_arena,
+        ctl_arena: sym_ctl_arena,
     }
 }
 
@@ -180,10 +336,13 @@ fn build_indices(
         var_map.insert(var.name, idx);
         if let SsmvType::Enum(ids) = &var.data_type {
             for (v_idx, &val_id) in ids.iter().enumerate() {
-                if enum_map.contains_key(&val_id) {
-                    panic!("Duplicate enum value ID: {:?}", val_id);
+                if let Some(&(_existing_var_idx, existing_v_idx)) = enum_map.get(&val_id) {
+                    if existing_v_idx != v_idx {
+                        panic!("Enum value {:?} is used with conflicting indices!", val_id);
+                    }
+                } else {
+                    enum_map.insert(val_id, (idx, v_idx));
                 }
-                enum_map.insert(val_id, (idx, v_idx));
             }
         }
     }
@@ -244,13 +403,15 @@ fn translate_expr(
         }
 
         SsmvExpr::Case(start, len) => {
-            let sym_start = sym_arena.case_buffer.len() as u32;
-            for i in (*start as usize)..(*start as usize + *len as usize) {
-                let (c, t) = ast_arena.case_arms[i];
+            let mut tmp = Vec::with_capacity(*len as usize);
+            for i in 0..(*len as usize) {
+                let (c, t) = ast_arena.case_arms[*start as usize + i];
                 let sc = translate_expr(c, ast_arena, sym_arena, var_map, def_map, enum_map, stack);
                 let st = translate_expr(t, ast_arena, sym_arena, var_map, def_map, enum_map, stack);
-                sym_arena.case_buffer.push((sc, st));
+                tmp.push((sc, st));
             }
+            let sym_start = sym_arena.case_buffer.len() as u32;
+            sym_arena.case_buffer.extend(tmp);
             SymbolicExpr::Case {
                 start: sym_start,
                 len: *len,
@@ -258,12 +419,14 @@ fn translate_expr(
         }
 
         SsmvExpr::Set(start, len) => {
-            let sym_start = sym_arena.set_buffer.len() as u32;
-            for i in (*start as usize)..(*start as usize + *len as usize) {
-                let e = ast_arena.set_elements[i];
+            let mut tmp = Vec::with_capacity(*len as usize);
+            for i in 0..(*len as usize) {
+                let e = ast_arena.set_elements[*start as usize + i];
                 let se = translate_expr(e, ast_arena, sym_arena, var_map, def_map, enum_map, stack);
-                sym_arena.set_buffer.push(se);
+                tmp.push(se);
             }
+            let sym_start = sym_arena.set_buffer.len() as u32;
+            sym_arena.set_buffer.extend(tmp);
             SymbolicExpr::Set {
                 start: sym_start,
                 len: *len,
@@ -271,9 +434,7 @@ fn translate_expr(
         }
     };
 
-    let id = SymbolicExprID(sym_arena.expressions.len() as u32);
-    sym_arena.expressions.push(expr);
-    id
+    sym_arena.alloc_expr(expr)
 }
 
 #[cfg(test)]
