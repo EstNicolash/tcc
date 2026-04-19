@@ -86,7 +86,7 @@ pub enum UnaryOp {
 }
 
 pub struct Variable {
-    pub name: IdentifierID,
+    pub _name: IdentifierID,
     pub domain: Domain,
 }
 
@@ -252,7 +252,7 @@ pub fn build_model(ast: SsmvModel) -> Model {
         .variables
         .iter()
         .map(|v| Variable {
-            name: v.name,
+            _name: v.name,
             domain: match &v.data_type {
                 SsmvType::Boolean => Domain::Boolean,
                 SsmvType::Range(lo, hi) => Domain::Range { min: *lo, max: *hi },
