@@ -120,3 +120,5 @@ CTLSPEC EF (gamestate = solved & hp = 0)
 
 -- 13) Exemplo falso: Impossível perder
 CTLSPEC ! EF (gamestate = lost)
+
+CTLSPEC AF ((gamestate = solved) | (gamestate = lost))

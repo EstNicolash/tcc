@@ -1,0 +1,23 @@
+# 1. Disable counter-examples (Fair comparison with your Rust tool)
+set default_trace_plugin 0
+
+# 2. Parse the model
+read_model -i chest.smv
+flatten_hierarchy
+encode_variables
+
+# 3. Build the state space (Kripke Structure / BDDs)
+build_model
+
+# [MILESTONE 1] Print time and memory after parsing and building
+echo "[MILESTONE 1] Parse and State Space Expansion"
+print_usage
+
+# 4. Run CTL Verification
+check_ctlspec
+
+# [MILESTONE 2] Print time and memory after verification
+echo "[MILESTONE 2] CTL Verification Phase"
+print_usage
+
+quit

@@ -49,4 +49,5 @@ pub enum InputFormat {
 #[derive(ValueEnum, Clone, Debug)]
 pub enum Algorithm {
     Labelling,
+    LabellingScc,
 }
