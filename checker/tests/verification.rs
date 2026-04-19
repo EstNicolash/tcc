@@ -13,7 +13,7 @@ fn setup_traffic_light() -> (KripkeStructure, Model) {
 
     let light_name = ast_names.intern_identifier("light");
     let light_var = Variable {
-        name: light_name,
+        _name: light_name,
         domain: Domain::Range { min: 0, max: 2 },
     };
 
@@ -90,7 +90,7 @@ fn test_simple_boolean_logic() {
     let mut ctl_arena = CtlFormulaArena::new();
 
     let var = Variable {
-        name: ast_names.intern_identifier("x"),
+        _name: ast_names.intern_identifier("x"),
         domain: Domain::Boolean,
     };
 
