@@ -124,7 +124,7 @@ fn map_un_op(op: &str) -> UnaryOp {
     }
 }
 
-fn translate_and_purify_ctl(
+fn rebase_ctl_formula(
     ast_f_id: FormulaID,
     old_arena: &CtlFormulaArena<ExprID>,
     new_arena: &mut CtlFormulaArena<SymbolicExprID>,
@@ -140,105 +140,44 @@ fn translate_and_purify_ctl(
     }
 
     let formula = old_arena.get(ast_f_id);
-
     let mut conv = |f| {
-        translate_and_purify_ctl(
+        rebase_ctl_formula(
             f, old_arena, new_arena, memo, ast_arena, sym_arena, var_map, def_map, enum_map,
         )
     };
 
-    let new_id = match formula {
-        CtlFormula::Prop(ast_expr_id) => {
-            let mut stack = Vec::new();
-            let sym_expr_id = translate_expr(
-                *ast_expr_id,
+    let new_formula = match formula {
+        CtlFormula::True => CtlFormula::True,
+        CtlFormula::False => CtlFormula::False,
+        CtlFormula::Prop(id) => {
+            let sym_id = translate_expr(
+                *id,
                 ast_arena,
                 sym_arena,
                 var_map,
                 def_map,
                 enum_map,
-                &mut stack,
+                &mut Vec::new(),
             );
-            new_arena.insert(CtlFormula::Prop(sym_expr_id))
+            CtlFormula::Prop(sym_id)
         }
-
-        CtlFormula::EG(f) => {
-            let f_c = conv(*f);
-            let not_f = new_arena.insert(CtlFormula::Not(f_c));
-            let af_not_f = new_arena.insert(CtlFormula::AF(not_f));
-            new_arena.insert(CtlFormula::Not(af_not_f))
-        }
-        CtlFormula::AG(f) => {
-            let f_c = conv(*f);
-            let not_f = new_arena.insert(CtlFormula::Not(f_c));
-            let t_id = new_arena.insert(CtlFormula::True);
-            let eu = new_arena.insert(CtlFormula::EU(t_id, not_f));
-            new_arena.insert(CtlFormula::Not(eu))
-        }
-        CtlFormula::EF(f) => {
-            let f_c = conv(*f);
-            let t_id = new_arena.insert(CtlFormula::True);
-            new_arena.insert(CtlFormula::EU(t_id, f_c))
-        }
-        CtlFormula::AU(f1, f2) => {
-            let f1_c = conv(*f1);
-            let f2_c = conv(*f2);
-            let not_f1 = new_arena.insert(CtlFormula::Not(f1_c));
-            let not_f2 = new_arena.insert(CtlFormula::Not(f2_c));
-            let and_n1_n2 = new_arena.insert(CtlFormula::And(not_f1, not_f2));
-            let eu = new_arena.insert(CtlFormula::EU(not_f2, and_n1_n2));
-            let af_f2 = new_arena.insert(CtlFormula::AF(f2_c));
-            let not_af = new_arena.insert(CtlFormula::Not(af_f2));
-            let or_f = new_arena.insert(CtlFormula::Or(eu, not_af));
-            new_arena.insert(CtlFormula::Not(or_f))
-        }
-
-        CtlFormula::Not(f) => {
-            let c = conv(*f);
-            new_arena.insert(CtlFormula::Not(c))
-        }
-        CtlFormula::And(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::And(c1, c2))
-        }
-        CtlFormula::Or(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::Or(c1, c2))
-        }
-        CtlFormula::Imply(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::Imply(c1, c2))
-        }
-        CtlFormula::EX(f) => {
-            let c = conv(*f);
-            new_arena.insert(CtlFormula::EX(c))
-        }
-        CtlFormula::AX(f) => {
-            let c = conv(*f);
-            new_arena.insert(CtlFormula::AX(c))
-        }
-        CtlFormula::AF(f) => {
-            let c = conv(*f);
-            new_arena.insert(CtlFormula::AF(c))
-        }
-        CtlFormula::EU(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::EU(c1, c2))
-        }
-        CtlFormula::Iff(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::Iff(c1, c2))
-        }
-        CtlFormula::True => new_arena.insert(CtlFormula::True),
-        CtlFormula::False => new_arena.insert(CtlFormula::False),
-        _ => panic!("Unknown operator {:?}", formula),
+        CtlFormula::Not(f) => CtlFormula::Not(conv(*f)),
+        CtlFormula::EX(f) => CtlFormula::EX(conv(*f)),
+        CtlFormula::AX(f) => CtlFormula::AX(conv(*f)),
+        CtlFormula::EF(f) => CtlFormula::EF(conv(*f)),
+        CtlFormula::AF(f) => CtlFormula::AF(conv(*f)),
+        CtlFormula::EG(f) => CtlFormula::EG(conv(*f)),
+        CtlFormula::AG(f) => CtlFormula::AG(conv(*f)),
+        CtlFormula::And(f1, f2) => CtlFormula::And(conv(*f1), conv(*f2)),
+        CtlFormula::Or(f1, f2) => CtlFormula::Or(conv(*f1), conv(*f2)),
+        CtlFormula::Imply(f1, f2) => CtlFormula::Imply(conv(*f1), conv(*f2)),
+        CtlFormula::Iff(f1, f2) => CtlFormula::Iff(conv(*f1), conv(*f2)),
+        CtlFormula::EU(f1, f2) => CtlFormula::EU(conv(*f1), conv(*f2)),
+        CtlFormula::AU(f1, f2) => CtlFormula::AU(conv(*f1), conv(*f2)),
+        _ => panic!("Operator not implemented"),
     };
 
+    let new_id = new_arena.insert(new_formula);
     memo.insert(ast_f_id, new_id);
     new_id
 }
@@ -296,7 +235,7 @@ pub fn build_model(ast: SsmvModel) -> Model {
     let mut sym_specs = Vec::new();
 
     for &ast_spec_id in &ast.specifications {
-        let sym_spec_id = translate_and_purify_ctl(
+        let sym_spec_id = rebase_ctl_formula(
             ast_spec_id,
             &ast.ctl_arena,
             &mut sym_ctl_arena,
