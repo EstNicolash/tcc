@@ -8,8 +8,31 @@ mod specs;
 use clap::Parser;
 use cli::{Algorithm, Cli, Commands, InputFormat};
 use colored::*;
+use memory_stats::memory_stats;
 use std::fs;
 use std::process;
+use std::time::Instant;
+
+// --- Helper function for benchmarking ---
+fn print_milestone(name: &str, start_time: Instant) {
+    let elapsed = start_time.elapsed();
+
+    // Fetch current memory usage
+    let memory_mb = if let Some(usage) = memory_stats() {
+        usage.physical_mem as f64 / (1024.0 * 1024.0) // Convert bytes to MB
+    } else {
+        0.0
+    };
+
+    println!(
+        "{} [{}] Time: {:.2?}, Memory: {:.2} MB",
+        "⏱".cyan(),
+        name.bold(),
+        elapsed,
+        memory_mb
+    );
+}
+// -----------------------------------------
 
 fn main() {
     let cli = Cli::parse();
@@ -28,6 +51,7 @@ fn main() {
         }
     }
 }
+
 fn run_verification(
     model_path: String,
     _spec_path: String,
@@ -39,10 +63,16 @@ fn run_verification(
         format!("--- Model Checker (Verify): {} ---", model_path.bold()).blue()
     );
 
+    // [MILESTONE 0] Start the global timer
+    let total_start = Instant::now();
+
     let input_content = fs::read_to_string(&model_path).unwrap_or_else(|e| {
         eprintln!("{} {}", "Error reading file:".red().bold(), e);
         process::exit(1);
     });
+
+    // [MILESTONE 1] Start parsing and expansion timer
+    let phase_start = Instant::now();
 
     let (ks, model, formula_strings) = match format {
         InputFormat::Pnml => {
@@ -80,11 +110,13 @@ fn run_verification(
         }
     };
 
+    print_milestone("Parse & State Space Expansion", phase_start);
+
     let num_states = ks.num_states();
     let num_specs = model.specs.len();
 
     println!(
-        "{} Model loaded via {:?} ({} states). {} formulas found.\n",
+        "\n{} Model loaded via {:?} ({} states). {} formulas found.\n",
         "✔".green(),
         format,
         num_states,
@@ -96,9 +128,26 @@ fn run_verification(
         return;
     }
 
+    // [MILESTONE 2] Start verification timer
+    let verify_start = Instant::now();
+
     let results = match algorithm {
-        Algorithm::Labelling => algorithms::labelling::verify(&ks, model),
+        Algorithm::Labelling => {
+            println!("{} Using Naive Labelling algorithm...", "ℹ".blue());
+            algorithms::labelling::verify(&ks, model)
+        }
+        Algorithm::LabellingScc => {
+            println!(
+                "{} Using SCC-based Labelling (Tarjan) algorithm...",
+                "ℹ".blue()
+            );
+            algorithms::labelling_scc::verify(&ks, model)
+        }
     };
+
+    print_milestone("CTL Verification Phase", verify_start);
+    println!();
+
     for (i, result) in results.into_iter().enumerate() {
         let result_text = if result {
             "TRUE".green().bold()
@@ -114,6 +163,9 @@ fn run_verification(
             result_text
         );
     }
+
+    println!();
+    print_milestone("Total Execution", total_start);
 }
 
 fn run_parser_test(input_file: String, output: Option<String>) {
