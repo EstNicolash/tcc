@@ -1,53 +1,10 @@
+use crate::algorithms::labelling::LabelingProvider;
 use crate::core::kripke_structure::{KripkeStructure, StateID};
 use crate::modeling::expansion::eval;
 use crate::modeling::symbolic::{Model, SymbolicArena};
 use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
 use fixedbitset::FixedBitSet;
-use std::collections::HashMap;
-
-/// The `LabelingProvider` acts as a centralized truth table for the Model Checking process.
-/// It stores which states (StateID) satisfy which subformulas (FormulaID).
-pub struct LabelingProvider {
-    /// marks[formula_id.0] = { s ∈ S | s ⊨ φ }
-    /// Represented as a FixedBitSet where the bit index is the StateID.
-    pub marks: Vec<FixedBitSet>,
-    num_states: usize,
-}
-
-impl LabelingProvider {
-    /// Creates a new LabelingProvider.
-    /// Needs the total number of states to correctly size the bitsets,
-    /// and the current size of the formula arena to pre-allocate the outer vector.
-    pub fn new(num_states: usize, num_formulas: usize) -> Self {
-        Self {
-            marks: vec![FixedBitSet::with_capacity(num_states); num_formulas],
-            num_states,
-        }
-    }
-
-    /// Returns the complete FixedBitSet for a given formula.
-    /// Extremely useful for O(1) set operations (like bitwise AND for formulas).
-    pub fn get_states_for_formula(&self, formula_id: FormulaID) -> Option<&FixedBitSet> {
-        self.marks.get(formula_id.0 as usize)
-    }
-
-    /*
-    pub fn debug_print(&self, num_states: usize, arena: &CtlFormulaArena) {
-        println!("\n--- DEBUG: STATE LABELS ---");
-        for s in 0..num_states {
-            let mut labels = Vec::new();
-            for f_idx in 0..self.marks.len() {
-                if self.marks[f_idx].contains(s) {
-                    let formula = arena.get(FormulaID(f_idx as u32));
-                    labels.push(format!("{:?}", formula)); // Ou sua função de format
-                }
-            }
-            println!("State {}: {:?}", s, labels);
-        }
-        println!("---------------------------\n");
-    }
-    */
-}
+use std::collections::{HashMap, VecDeque};
 
 /// Converts a CTL formula to its equivalent core form for the labelling algorithm.
 ///
@@ -73,110 +30,74 @@ fn convert_to_core<P: Copy + Eq + std::hash::Hash>(
     }
 
     let formula = old_arena.get(f_id);
-
-    // Closure auxiliar para chamar a conversão limpamente
     let mut conv = |f| convert_to_core(f, old_arena, new_arena, memo);
 
-    let new_id = match formula {
-        // EG f => !AF !f
-        CtlFormula::EG(f) => {
-            let f_c = conv(*f);
-            let not_f = new_arena.insert(CtlFormula::Not(f_c));
-            let af_not_f = new_arena.insert(CtlFormula::AF(not_f));
-            new_arena.insert(CtlFormula::Not(af_not_f))
-        }
-
-        // AG f => !EF !f => !E[true U !f]
+    let core_formula = match formula {
+        // AG f => !E[true U !f]
         CtlFormula::AG(f) => {
             let f_c = conv(*f);
             let not_f = new_arena.insert(CtlFormula::Not(f_c));
-            let t_id = new_arena.insert(CtlFormula::True);
-            let eu = new_arena.insert(CtlFormula::EU(t_id, not_f));
-            new_arena.insert(CtlFormula::Not(eu))
+            let true_id = new_arena.insert(CtlFormula::True);
+            let eu = new_arena.insert(CtlFormula::EU(true_id, not_f));
+            CtlFormula::Not(eu)
         }
 
         // EF f => E[true U f]
         CtlFormula::EF(f) => {
             let f_c = conv(*f);
-            let t_id = new_arena.insert(CtlFormula::True);
-            new_arena.insert(CtlFormula::EU(t_id, f_c))
+            let true_id = new_arena.insert(CtlFormula::True);
+            CtlFormula::EU(true_id, f_c)
         }
 
         // AX f => !EX !f
         CtlFormula::AX(f) => {
             let f_c = conv(*f);
             let not_f = new_arena.insert(CtlFormula::Not(f_c));
-            let ex_not_f = new_arena.insert(CtlFormula::EX(not_f));
-            new_arena.insert(CtlFormula::Not(ex_not_f))
+            let ex = new_arena.insert(CtlFormula::EX(not_f));
+            CtlFormula::Not(ex)
         }
+
+        // AF f => !EG !f
+        CtlFormula::AF(f) => {
+            let f_c = conv(*f);
+            let not_f = new_arena.insert(CtlFormula::Not(f_c));
+            let eg = new_arena.insert(CtlFormula::EG(not_f));
+            CtlFormula::Not(eg)
+        }
+
         // A[f1 U f2] => !(E[!f2 U (!f1 and !f2)] or EG !f2)
         CtlFormula::AU(f1, f2) => {
-            let f1_c = conv(*f1);
-            let f2_c = conv(*f2);
-
+            let (f1_c, f2_c) = (conv(*f1), conv(*f2));
             let not_f1 = new_arena.insert(CtlFormula::Not(f1_c));
             let not_f2 = new_arena.insert(CtlFormula::Not(f2_c));
 
-            let and_n1_n2 = new_arena.insert(CtlFormula::And(not_f1, not_f2));
-            let eu = new_arena.insert(CtlFormula::EU(not_f2, and_n1_n2));
+            let inner_and = new_arena.insert(CtlFormula::And(not_f1, not_f2));
+            let eu = new_arena.insert(CtlFormula::EU(not_f2, inner_and));
+            let eg = new_arena.insert(CtlFormula::EG(not_f2));
 
-            let af_f2 = new_arena.insert(CtlFormula::AF(f2_c));
-            let not_af = new_arena.insert(CtlFormula::Not(af_f2));
-
-            let or_f = new_arena.insert(CtlFormula::Or(eu, not_af));
-            new_arena.insert(CtlFormula::Not(or_f))
+            let or_f = new_arena.insert(CtlFormula::Or(eu, eg));
+            CtlFormula::Not(or_f)
         }
 
-        // --- Direct Conversions (Only propagate conversion to children) ---
-        CtlFormula::Not(f) => {
-            let c = conv(*f);
-            new_arena.insert(CtlFormula::Not(c))
-        }
-        CtlFormula::And(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::And(c1, c2))
-        }
-        CtlFormula::Or(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::Or(c1, c2))
-        }
-        CtlFormula::Imply(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::Imply(c1, c2))
-        }
+        CtlFormula::Not(f) => CtlFormula::Not(conv(*f)),
+        CtlFormula::EX(f) => CtlFormula::EX(conv(*f)),
+        CtlFormula::EG(f) => CtlFormula::EG(conv(*f)),
+        CtlFormula::And(f1, f2) => CtlFormula::And(conv(*f1), conv(*f2)),
+        CtlFormula::Or(f1, f2) => CtlFormula::Or(conv(*f1), conv(*f2)),
+        CtlFormula::EU(f1, f2) => CtlFormula::EU(conv(*f1), conv(*f2)),
+        CtlFormula::Imply(f1, f2) => CtlFormula::Imply(conv(*f1), conv(*f2)),
+        CtlFormula::Iff(f1, f2) => CtlFormula::Iff(conv(*f1), conv(*f2)),
 
-        CtlFormula::Iff(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::Iff(c1, c2))
-        }
-        CtlFormula::EX(f) => {
-            let c = conv(*f);
-            new_arena.insert(CtlFormula::EX(c))
-        }
-        CtlFormula::AF(f) => {
-            let c = conv(*f);
-            new_arena.insert(CtlFormula::AF(c))
-        }
-        CtlFormula::EU(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::EU(c1, c2))
-        }
-
-        CtlFormula::True => new_arena.insert(CtlFormula::True),
-        CtlFormula::False => new_arena.insert(CtlFormula::False),
-        CtlFormula::Prop(p) => new_arena.insert(CtlFormula::Prop(*p)),
+        CtlFormula::True => CtlFormula::True,
+        CtlFormula::False => CtlFormula::False,
+        CtlFormula::Prop(p) => CtlFormula::Prop(*p),
     };
 
+    let new_id = new_arena.insert(core_formula);
     memo.insert(f_id, new_id);
     new_id
 }
-
-pub fn purify_model_specs(model: &mut Model) {
+fn purify_model_specs(model: &mut Model) {
     let mut core_arena = CtlFormulaArena::new();
     let mut memo = HashMap::new();
     let mut core_specs = Vec::new();
@@ -190,6 +111,75 @@ pub fn purify_model_specs(model: &mut Model) {
 
     model.ctl_arena = core_arena;
     model.specs = core_specs;
+}
+
+struct TarjanContext {
+    indices: Vec<Option<usize>>,
+    lowlinks: Vec<usize>,
+    stack: Vec<StateID>,
+    on_stack: Vec<bool>,
+    next_index: usize,
+    sccs: Vec<Vec<StateID>>,
+}
+
+fn strong_connect(
+    structure: &KripkeStructure,
+    f_sat: &FixedBitSet,
+    u: StateID,
+    ctx: &mut TarjanContext,
+) {
+    let u_vec_idx = u.0 as usize;
+    ctx.indices[u_vec_idx] = Some(ctx.next_index);
+    ctx.lowlinks[u_vec_idx] = ctx.next_index;
+    ctx.stack.push(u);
+    ctx.on_stack[u_vec_idx] = true;
+    ctx.next_index += 1;
+
+    for &v in structure.get_successors(u) {
+        if !f_sat.contains(v.0 as usize) {
+            continue;
+        }
+        let v_vec_idx = v.0 as usize;
+        if ctx.indices[v_vec_idx].is_none() {
+            strong_connect(structure, f_sat, v, ctx);
+            ctx.lowlinks[u_vec_idx] = ctx.lowlinks[u_vec_idx].min(ctx.lowlinks[v_vec_idx]);
+        } else if ctx.on_stack[v_vec_idx] {
+            ctx.lowlinks[u_vec_idx] = ctx.lowlinks[u_vec_idx].min(ctx.indices[v_vec_idx].unwrap());
+        }
+    }
+
+    if ctx.lowlinks[u_vec_idx] == ctx.indices[u_vec_idx].unwrap() {
+        let mut scc = Vec::new();
+        loop {
+            let v = ctx.stack.pop().unwrap();
+            let v_vec_idx = v.0 as usize;
+            scc.push(v);
+            ctx.on_stack[v_vec_idx] = false;
+            if v == u {
+                break;
+            }
+        }
+        ctx.sccs.push(scc);
+    }
+}
+
+pub fn tarjan_scc(structure: &KripkeStructure, f_sat: &FixedBitSet) -> Vec<Vec<StateID>> {
+    let mut ctx = TarjanContext {
+        indices: vec![None; structure.num_states()],
+        lowlinks: vec![0; structure.num_states()],
+        stack: Vec::with_capacity(structure.num_states()),
+        on_stack: vec![false; structure.num_states()],
+        next_index: 0,
+        sccs: Vec::new(),
+    };
+
+    for s in f_sat.ones() {
+        if ctx.indices[s].is_none() {
+            strong_connect(structure, f_sat, StateID(s as u32), &mut ctx);
+        }
+    }
+
+    ctx.sccs
 }
 
 /// Labels the states in the Kripke structure according to the given CTL formula.
@@ -386,44 +376,45 @@ fn label_formula(
             provider.marks[f_idx] = result;
         }
 
-        CtlFormula::AF(sf) => {
-            let f_idx = f_id.0 as usize;
-            let child_marks = provider.get_states_for_formula(*sf).unwrap();
+        CtlFormula::EG(sf) => {
+            let sf_idx = sf.0 as usize;
+            let sf_sat = &provider.marks[sf_idx];
+            let all_sccs = tarjan_scc(structure, &sf_sat);
+            let mut eg_sat = FixedBitSet::with_capacity(structure.num_states());
+            let mut queue = Vec::new();
 
-            let mut result = FixedBitSet::with_capacity(num_states);
-            let mut todo = Vec::new();
+            for scc in all_sccs {
+                let is_nontrivial = if scc.len() > 1 {
+                    true
+                } else {
+                    // Check if the the "trivial" SCC has a self-loop, if so, it's nontrivial
+                    let u = scc[0];
+                    structure
+                        .get_successors(u)
+                        .iter()
+                        .any(|&v| v == u && sf_sat.contains(v.0 as usize))
+                };
 
-            let mut out_degree: Vec<u32> = (0..num_states)
-                .map(|s| structure.get_successors(StateID(s as u32)).len() as u32)
-                .collect();
-
-            // If the state already satisfies sf, it satisfies AF sf
-            for s_idx in child_marks.ones() {
-                result.insert(s_idx);
-                todo.push(StateID(s_idx as u32));
-            }
-
-            // 4. Backward propagation: if all successors of a parent are marked, the parent also enters
-            while let Some(state_id) = todo.pop() {
-                for &pred in structure.get_predecessors(state_id) {
-                    let pred_idx = pred.0 as usize;
-
-                    // If the predecessor is not already marked, check if all successors are marked
-                    if !result.contains(pred_idx) {
-                        if out_degree[pred_idx] > 0 {
-                            out_degree[pred_idx] -= 1;
-                        }
-
-                        // If the count is zero, all successors are marked, so the predecessor also enters
-                        if out_degree[pred_idx] == 0 {
-                            result.insert(pred_idx);
-                            todo.push(pred);
-                        }
+                // If the SCC is nontrivial, mark all states and enqueue them for processing
+                if is_nontrivial {
+                    for state in scc {
+                        eg_sat.insert(state.0 as usize);
+                        queue.push(state);
                     }
                 }
             }
 
-            provider.marks[f_idx] = result;
+            //Backpropagation
+            while let Some(state) = queue.pop() {
+                for &pred in structure.get_predecessors(state) {
+                    if !eg_sat.contains(pred.0 as usize) && sf_sat.contains(pred.0 as usize) {
+                        eg_sat.insert(pred.0 as usize);
+                        queue.push(pred);
+                    }
+                }
+            }
+
+            provider.marks[f_id.0 as usize] = eg_sat;
         }
 
         // Add label if all paths from a state satisfy f in some future
@@ -469,61 +460,99 @@ pub fn verify(structure: &KripkeStructure, mut model: Model) -> Vec<bool> {
 
     results
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
 
     #[test]
-    fn test_ef_conversion_to_core() {
+    fn test_af_conversion_to_core_scc() {
         let mut old_arena = CtlFormulaArena::new();
         let mut new_arena = CtlFormulaArena::new();
         let mut memo = HashMap::new();
 
-        let p_id = 42;
+        let p_id = 1;
         let prop = old_arena.insert(CtlFormula::Prop(p_id));
-        let ef_p = old_arena.insert(CtlFormula::EF(prop));
+        let af_p = old_arena.insert(CtlFormula::AF(prop));
 
-        let root_id = convert_to_core(ef_p, &old_arena, &mut new_arena, &mut memo);
+        let root_id = convert_to_core(af_p, &old_arena, &mut new_arena, &mut memo);
 
-        // 3. EU(True, p)
-        let root_formula = new_arena.get(root_id);
-        if let CtlFormula::EU(f1, f2) = root_formula {
-            assert!(matches!(new_arena.get(*f1), CtlFormula::True));
-            if let CtlFormula::Prop(p) = new_arena.get(*f2) {
-                assert_eq!(*p, 42);
+        let f_root = new_arena.get(root_id);
+        if let CtlFormula::Not(eg_id) = f_root {
+            let f_eg = new_arena.get(*eg_id);
+            if let CtlFormula::EG(not_p_id) = f_eg {
+                let f_not_p = new_arena.get(*not_p_id);
+                if let CtlFormula::Not(p_id_inner) = f_not_p {
+                    if let CtlFormula::Prop(p) = new_arena.get(*p_id_inner) {
+                        assert_eq!(*p, 1);
+                    } else {
+                        panic!("Inner element should be a Prop(1)");
+                    }
+                } else {
+                    panic!("Inner element should be a Not(p)");
+                }
             } else {
-                panic!("F2 should be a Prop p");
+                panic!("Should be an EG operator");
             }
         } else {
-            panic!("EF should be converted to EU");
+            panic!("AF conversion should start with a Not operator");
         }
     }
 
     #[test]
-    fn test_ag_conversion_to_core() {
+    fn test_au_conversion_to_core_scc() {
         let mut old_arena = CtlFormulaArena::new();
         let mut new_arena = CtlFormulaArena::new();
         let mut memo = HashMap::new();
 
-        // 1. AG p
-        let prop = old_arena.insert(CtlFormula::Prop(1));
-        let ag_p = old_arena.insert(CtlFormula::AG(prop));
+        let p = old_arena.insert(CtlFormula::Prop(1));
+        let q = old_arena.insert(CtlFormula::Prop(2));
+        let au_pq = old_arena.insert(CtlFormula::AU(p, q));
 
-        //  AG p => !E[true U !p]
-        let root_id = convert_to_core(ag_p, &old_arena, &mut new_arena, &mut memo);
+        let root_id = convert_to_core(au_pq, &old_arena, &mut new_arena, &mut memo);
 
         let f_root = new_arena.get(root_id); // Not(...)
         assert!(matches!(f_root, CtlFormula::Not(_)));
 
-        if let CtlFormula::Not(eu_id) = f_root {
-            let f_eu = new_arena.get(*eu_id); // EU(True, Not(p))
-            if let CtlFormula::EU(t_id, not_p_id) = f_eu {
-                assert!(matches!(new_arena.get(*t_id), CtlFormula::True));
-                assert!(matches!(new_arena.get(*not_p_id), CtlFormula::Not(_)));
+        if let CtlFormula::Not(or_id) = f_root {
+            let f_or = new_arena.get(*or_id); // Or(EU, EG)
+            if let CtlFormula::Or(eu_id, eg_id) = f_or {
+                // Verify EG part: EG(!q)
+                if let CtlFormula::EG(not_q_id) = new_arena.get(*eg_id) {
+                    assert!(matches!(new_arena.get(*not_q_id), CtlFormula::Not(_)));
+                } else {
+                    panic!("Should contain an EG as part of the AU negation");
+                }
+
+                // Verify EU part: E[!q U (!p and !q)]
+                assert!(matches!(new_arena.get(*eu_id), CtlFormula::EU(_, _)));
             } else {
-                panic!("Should be EU");
+                panic!("AU should be converted to a negation of an OR expression");
             }
+        }
+    }
+
+    #[test]
+    fn test_passthrough_core_operators() {
+        let mut old_arena = CtlFormulaArena::new();
+        let mut new_arena = CtlFormulaArena::new();
+        let mut memo = HashMap::new();
+
+        let p = old_arena.insert(CtlFormula::Prop(100));
+        let eg_p = old_arena.insert(CtlFormula::EG(p));
+
+        let root_id = convert_to_core(eg_p, &old_arena, &mut new_arena, &mut memo);
+
+        let f_root = new_arena.get(root_id);
+        if let CtlFormula::EG(inner_id) = f_root {
+            if let CtlFormula::Prop(val) = new_arena.get(*inner_id) {
+                assert_eq!(*val, 100);
+            } else {
+                panic!("Child should be Prop(100)");
+            }
+        } else {
+            panic!("EG should be preserved as a core operator");
         }
     }
 }
