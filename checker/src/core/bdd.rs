@@ -7,6 +7,8 @@ use oxidd::{BooleanFunction, Function, Manager, ManagerRef};
 pub struct SymbolicContext {
     pub manager: BDDManagerRef,
     pub var_map: Vec<VarBits>,
+    pub initial_states: BDDFunction,
+    pub transition_relation: BDDFunction,
 }
 
 pub struct VarBits {
