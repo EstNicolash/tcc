@@ -1,4 +1,3 @@
-use crate::ExprID;
 use crate::core::bdd::{
     SymbolicContext, bdd_number_eq, bdd_number_gt, bdd_number_gte, bdd_number_lt, bdd_number_lte,
     bdd_number_neq, bdd_number_sub, ripple_carry_adder,
@@ -25,7 +24,7 @@ pub fn compile_model_to_bdd(model: &Model) -> SymbolicContext {
     symbolic_ctx
 }
 
-pub fn compile_initial_states(model: &Model, symbolic_ctx: &mut SymbolicContext) {
+fn compile_initial_states(model: &Model, symbolic_ctx: &mut SymbolicContext) {
     let mut global_init = symbolic_ctx
         .manager
         .with_manager_shared(|m| BDDFunction::t(m));
@@ -48,10 +47,10 @@ pub fn compile_initial_states(model: &Model, symbolic_ctx: &mut SymbolicContext)
         global_init = global_init.and(&var_init_relation).unwrap();
     }
 
-    symbolic_ctx.initial_states = global_init;
+    symbolic_ctx.initial_states = Some(global_init);
 }
 
-pub fn compile_transition_relation(model: &Model, symbolic_ctx: &mut SymbolicContext) {
+fn compile_transition_relation(model: &Model, symbolic_ctx: &mut SymbolicContext) {
     let mut global_delta = symbolic_ctx
         .manager
         .with_manager_shared(|m| BDDFunction::t(m));
@@ -96,10 +95,10 @@ pub fn compile_transition_relation(model: &Model, symbolic_ctx: &mut SymbolicCon
         }
     }
 
-    symbolic_ctx.transition_relation = global_delta;
+    symbolic_ctx.transition_relation = Some(global_delta);
 }
 
-pub fn build_assignment_relation(
+fn build_assignment_relation(
     symbolic_ctx: &SymbolicContext,
     target_bdds: &[BDDFunction],
     expr_id: SymbolicExprID,

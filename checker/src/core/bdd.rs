@@ -2,13 +2,17 @@
 use crate::modeling::symbolic::{Domain, Model};
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
-use oxidd::{BooleanFunction, Function, Manager, ManagerRef};
+use oxidd::{BooleanFunction, Function, FunctionSubst, Manager, ManagerRef, Subst, VarNo};
 
 pub struct SymbolicContext {
     pub manager: BDDManagerRef,
     pub var_map: Vec<VarBits>,
-    pub initial_states: BDDFunction,
-    pub transition_relation: BDDFunction,
+    pub initial_states: Option<BDDFunction>,
+    pub transition_relation: Option<BDDFunction>,
+
+    curr_ids: Vec<VarNo>,
+    next_bdds: Vec<BDDFunction>,
+    pub next_vars_cube: BDDFunction,
 }
 
 pub struct VarBits {
@@ -46,7 +50,37 @@ impl SymbolicContext {
             }
         });
 
-        SymbolicContext { manager, var_map }
+        let mut curr_ids = Vec::new();
+        let mut next_bdds = Vec::new();
+
+        for var_bits in &var_map {
+            for (curr, next) in var_bits.curr.iter().zip(&var_bits.next) {
+                curr_ids.push(*curr);
+                let bdd = manager.with_manager_shared(|m| {
+                    BDDFunction::var(m, *next).expect("Failed to create next var BDD")
+                });
+                next_bdds.push(bdd);
+            }
+        }
+
+        let next_vars_cube = next_bdds.iter().fold(
+            manager.with_manager_shared(|m| BDDFunction::t(m)),
+            |acc, bdd| acc.and(bdd).unwrap(),
+        );
+        SymbolicContext {
+            manager,
+            var_map,
+            initial_states: None,
+            transition_relation: None,
+            curr_ids,
+            next_bdds,
+            next_vars_cube,
+        }
+    }
+
+    pub fn shift_curr_to_next(&self, bdd: &BDDFunction) -> BDDFunction {
+        let subst = Subst::new(&self.curr_ids, &self.next_bdds);
+        bdd.substitute(&subst).expect("Substitution failed")
     }
 }
 
@@ -56,6 +90,39 @@ fn calc_bits(states: usize) -> usize {
     } else {
         (states as f64).log2().ceil() as usize
     }
+}
+
+pub fn substitute_var_with_future_vars(
+    bdd: &BDDFunction,
+    symbolic_ctx: &SymbolicContext,
+) -> (BDDFunction, BDDFunction) {
+    let mut vars_to_replace = Vec::new();
+    let mut replacements = Vec::new();
+
+    for var_bits in &symbolic_ctx.var_map {
+        for (curr_id, next_id) in var_bits.curr.iter().zip(&var_bits.next) {
+            vars_to_replace.push(*curr_id);
+            let next_bdd = symbolic_ctx
+                .manager
+                .with_manager_shared(|m| BDDFunction::var(m, *next_id).unwrap());
+            replacements.push(next_bdd);
+        }
+    }
+
+    let global_substitution = Subst::new(&vars_to_replace, &replacements);
+
+    //Represents the replacement vars set as a conjunction
+    //
+    let replacement_bdd = replacements.iter().fold(
+        symbolic_ctx
+            .manager
+            .with_manager_shared(|m| BDDFunction::t(m)),
+        |acc, bdd| acc.and(bdd).unwrap(),
+    );
+    (
+        bdd.substitute(&global_substitution).unwrap(),
+        replacement_bdd,
+    )
 }
 
 /// Full Adder: Returns the bitwise sum of two numbers using a full adder
