@@ -2,15 +2,10 @@ use crate::core::bdd::{
     SymbolicContext, bdd_number_eq, bdd_number_gt, bdd_number_gte, bdd_number_lt, bdd_number_lte,
     bdd_number_neq, bdd_number_sub, ripple_carry_adder,
 };
-use crate::modeling::symbolic::{
-    BinaryOp, Domain, Model, SymbolicArena, SymbolicExpr, SymbolicExprID, UnaryOp, Value,
-};
+use crate::modeling::symbolic::{BinaryOp, Model, SymbolicExpr, SymbolicExprID, UnaryOp, Value};
 
 use oxidd::bdd::BDDFunction;
-use oxidd::bdd::BDDManagerRef;
-use oxidd::{
-    BooleanFunction, BooleanFunctionQuant, FunctionSubst, Manager, ManagerRef, Subst, Substitution,
-};
+use oxidd::{BooleanFunction, ManagerRef};
 
 pub fn compile_model_to_bdd(model: &Model) -> SymbolicContext {
     // Create the symbolic context and allocate variables

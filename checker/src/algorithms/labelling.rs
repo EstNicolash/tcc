@@ -1,6 +1,6 @@
 use crate::core::kripke_structure::{KripkeStructure, StateID};
 use crate::modeling::expansion::eval;
-use crate::modeling::symbolic::{Model, SymbolicArena};
+use crate::modeling::symbolic::Model;
 use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
 use fixedbitset::FixedBitSet;
 use std::collections::HashMap;

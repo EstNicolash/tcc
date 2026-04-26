@@ -1,25 +1,13 @@
-use crate::core::kripke_structure::{KripkeStructure, StateID};
-use crate::modeling::expansion::eval;
 use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
-use fixedbitset::FixedBitSet;
 use std::collections::HashMap;
 
-use crate::core::bdd::{
-    SymbolicContext, bdd_number_eq, bdd_number_gt, bdd_number_gte, bdd_number_lt, bdd_number_lte,
-    bdd_number_neq, bdd_number_sub, ripple_carry_adder, substitute_var_with_future_vars,
-};
-use crate::modeling::symbolic::{
-    BinaryOp, Domain, Model, SymbolicArena, SymbolicExpr, SymbolicExprID, UnaryOp, Value,
-};
+use crate::core::bdd::SymbolicContext;
+use crate::modeling::symbolic::Model;
 
-use crate::modeling::bdd_compiler::{compile_model_to_bdd, eval_expr};
+use crate::modeling::bdd_compiler::eval_expr;
 
 use oxidd::bdd::BDDFunction;
-use oxidd::bdd::BDDManagerRef;
-use oxidd::{
-    BooleanFunction, BooleanFunctionQuant, BooleanOperator, FunctionSubst, Manager, ManagerRef,
-    Subst, Substitution,
-};
+use oxidd::{BooleanFunction, BooleanFunctionQuant, BooleanOperator, ManagerRef};
 
 pub struct SymbolicSatProvider {
     pub bdds: Vec<BDDFunction>,
@@ -44,8 +32,7 @@ impl SymbolicSatProvider {
         &self.bdds[formula_id.0 as usize]
     }
 }
-
-/// Converts a CTL formula to its equivalent core form for the labelling algorithm.
+/// Converts a CTL formula to its equivalent core form for the bdd algorithm.
 ///
 /// # Arguments
 ///
@@ -69,104 +56,70 @@ fn convert_to_core<P: Copy + Eq + std::hash::Hash>(
     }
 
     let formula = old_arena.get(f_id);
-
     let mut conv = |f| convert_to_core(f, old_arena, new_arena, memo);
 
-    let new_id = match formula {
-        // EG f => !AF !f
-        CtlFormula::EG(f) => {
-            let f_c = conv(*f);
-            let not_f = new_arena.insert(CtlFormula::Not(f_c));
-            let af_not_f = new_arena.insert(CtlFormula::AF(not_f));
-            new_arena.insert(CtlFormula::Not(af_not_f))
-        }
-
-        // AG f => !EF !f => !E[true U !f]
+    let core_formula = match formula {
+        // AG f => !E[true U !f]
         CtlFormula::AG(f) => {
             let f_c = conv(*f);
             let not_f = new_arena.insert(CtlFormula::Not(f_c));
-            let t_id = new_arena.insert(CtlFormula::True);
-            let eu = new_arena.insert(CtlFormula::EU(t_id, not_f));
-            new_arena.insert(CtlFormula::Not(eu))
+            let true_id = new_arena.insert(CtlFormula::True);
+            let eu = new_arena.insert(CtlFormula::EU(true_id, not_f));
+            CtlFormula::Not(eu)
         }
 
         // EF f => E[true U f]
         CtlFormula::EF(f) => {
             let f_c = conv(*f);
-            let t_id = new_arena.insert(CtlFormula::True);
-            new_arena.insert(CtlFormula::EU(t_id, f_c))
+            let true_id = new_arena.insert(CtlFormula::True);
+            CtlFormula::EU(true_id, f_c)
         }
 
         // AX f => !EX !f
         CtlFormula::AX(f) => {
             let f_c = conv(*f);
             let not_f = new_arena.insert(CtlFormula::Not(f_c));
-            let ex_not_f = new_arena.insert(CtlFormula::EX(not_f));
-            new_arena.insert(CtlFormula::Not(ex_not_f))
+            let ex = new_arena.insert(CtlFormula::EX(not_f));
+            CtlFormula::Not(ex)
         }
+
+        // AF f => !EG !f
+        CtlFormula::AF(f) => {
+            let f_c = conv(*f);
+            let not_f = new_arena.insert(CtlFormula::Not(f_c));
+            let eg = new_arena.insert(CtlFormula::EG(not_f));
+            CtlFormula::Not(eg)
+        }
+
         // A[f1 U f2] => !(E[!f2 U (!f1 and !f2)] or EG !f2)
         CtlFormula::AU(f1, f2) => {
-            let f1_c = conv(*f1);
-            let f2_c = conv(*f2);
-
+            let (f1_c, f2_c) = (conv(*f1), conv(*f2));
             let not_f1 = new_arena.insert(CtlFormula::Not(f1_c));
             let not_f2 = new_arena.insert(CtlFormula::Not(f2_c));
 
-            let and_n1_n2 = new_arena.insert(CtlFormula::And(not_f1, not_f2));
-            let eu = new_arena.insert(CtlFormula::EU(not_f2, and_n1_n2));
+            let inner_and = new_arena.insert(CtlFormula::And(not_f1, not_f2));
+            let eu = new_arena.insert(CtlFormula::EU(not_f2, inner_and));
+            let eg = new_arena.insert(CtlFormula::EG(not_f2));
 
-            let af_f2 = new_arena.insert(CtlFormula::AF(f2_c));
-            let not_af = new_arena.insert(CtlFormula::Not(af_f2));
-
-            let or_f = new_arena.insert(CtlFormula::Or(eu, not_af));
-            new_arena.insert(CtlFormula::Not(or_f))
+            let or_f = new_arena.insert(CtlFormula::Or(eu, eg));
+            CtlFormula::Not(or_f)
         }
 
-        // --- Direct Conversions (Only propagate conversion to children) ---
-        CtlFormula::Not(f) => {
-            let c = conv(*f);
-            new_arena.insert(CtlFormula::Not(c))
-        }
-        CtlFormula::And(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::And(c1, c2))
-        }
-        CtlFormula::Or(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::Or(c1, c2))
-        }
-        CtlFormula::Imply(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::Imply(c1, c2))
-        }
+        CtlFormula::Not(f) => CtlFormula::Not(conv(*f)),
+        CtlFormula::EX(f) => CtlFormula::EX(conv(*f)),
+        CtlFormula::EG(f) => CtlFormula::EG(conv(*f)),
+        CtlFormula::And(f1, f2) => CtlFormula::And(conv(*f1), conv(*f2)),
+        CtlFormula::Or(f1, f2) => CtlFormula::Or(conv(*f1), conv(*f2)),
+        CtlFormula::EU(f1, f2) => CtlFormula::EU(conv(*f1), conv(*f2)),
+        CtlFormula::Imply(f1, f2) => CtlFormula::Imply(conv(*f1), conv(*f2)),
+        CtlFormula::Iff(f1, f2) => CtlFormula::Iff(conv(*f1), conv(*f2)),
 
-        CtlFormula::Iff(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::Iff(c1, c2))
-        }
-        CtlFormula::EX(f) => {
-            let c = conv(*f);
-            new_arena.insert(CtlFormula::EX(c))
-        }
-        CtlFormula::AF(f) => {
-            let c = conv(*f);
-            new_arena.insert(CtlFormula::AF(c))
-        }
-        CtlFormula::EU(f1, f2) => {
-            let c1 = conv(*f1);
-            let c2 = conv(*f2);
-            new_arena.insert(CtlFormula::EU(c1, c2))
-        }
-
-        CtlFormula::True => new_arena.insert(CtlFormula::True),
-        CtlFormula::False => new_arena.insert(CtlFormula::False),
-        CtlFormula::Prop(p) => new_arena.insert(CtlFormula::Prop(*p)),
+        CtlFormula::True => CtlFormula::True,
+        CtlFormula::False => CtlFormula::False,
+        CtlFormula::Prop(p) => CtlFormula::Prop(*p),
     };
 
+    let new_id = new_arena.insert(core_formula);
     memo.insert(f_id, new_id);
     new_id
 }
@@ -187,13 +140,14 @@ pub fn purify_model_specs(model: &mut Model) {
     model.specs = core_specs;
 }
 
-/// Labels the states in the Kripke structure according to the given CTL formula.
+/// Construct a BDD (Sat(f)) for the given CTL formula.
 ///
 /// # Arguments
 ///
-/// * `formula` - The CTL formula to label the states with.
-/// * `structure` - The Kripke structure to label the states in.
-/// * `provider` - The provider to add labels to the states.
+/// * `f_id` - The ID of the CTL formula to construct the BDD for.
+/// * `symbolic_ctx` - The symbolic context containing the BDD manager.
+/// * `model` - The model
+/// * `provider` - The provider to add the BDD to.
 ///
 fn sat(
     f_id: FormulaID,
@@ -281,11 +235,71 @@ fn sat(
             provider.set_bdd_for_formula(f_id, bdd.unwrap());
         }
 
-        // Add label if all neighbors satisfy the subformula
-        // Add label if there is a path from a state that satisfies f1 to a state that satisfies f2
-        CtlFormula::EU(f1, f2) => {}
+        CtlFormula::EU(f1, f2) => {
+            let mut sat_f = provider.get_bdd_for_formula(*f2).clone(); // f0 = B
+            let sat_f1 = provider.get_bdd_for_formula(*f1).clone();
 
-        CtlFormula::AF(sf) => {}
+            let delta = symbolic_ctx.transition_relation.as_ref().expect("").clone();
+
+            loop {
+                let subst_sat_f = symbolic_ctx.shift_curr_to_next(&sat_f);
+
+                // EX(sat_f)
+                let ex_sat_f = delta
+                    .apply_exists(
+                        BooleanOperator::And,
+                        &subst_sat_f,
+                        &symbolic_ctx.next_vars_cube,
+                    )
+                    .expect("OOM: apply_exists");
+
+                // f_{j+1} = f_j | (C & EX(f_j))
+                let next_sat = sat_f1
+                    .and(&ex_sat_f)
+                    .expect("OOM: and")
+                    .or(&sat_f)
+                    .expect("OOM: or");
+
+                if next_sat == sat_f {
+                    break;
+                }
+                sat_f = next_sat;
+            }
+            provider.set_bdd_for_formula(f_id, sat_f);
+        }
+
+        CtlFormula::EG(sf) => {
+            let mut sat_f = provider.get_bdd_for_formula(*sf).clone();
+
+            let delta = symbolic_ctx
+                .transition_relation
+                .as_ref()
+                .expect("Transition relation not compiled")
+                .clone();
+
+            loop {
+                let subst_sat_f = symbolic_ctx.shift_curr_to_next(&sat_f);
+
+                // 1.EX(sat_f)
+                let ex_sat_f = delta
+                    .apply_exists(
+                        BooleanOperator::And,
+                        &subst_sat_f,
+                        &symbolic_ctx.next_vars_cube,
+                    )
+                    .expect("OOM: apply_exists");
+
+                let next_sat = sat_f.and(&ex_sat_f).expect("OOM: and");
+
+                if next_sat == sat_f {
+                    break;
+                }
+
+                sat_f = next_sat;
+            }
+
+            provider.set_bdd_for_formula(f_id, sat_f);
+        }
 
         // Add label if all paths from a state satisfy f in some future
         _ => panic!("Error: Operator {:?} should be converted!", formula),
@@ -300,23 +314,29 @@ pub fn verify(symbolic_ctx: &SymbolicContext, mut model: Model) -> Vec<bool> {
 
     for f_idx in 0..num_formulas {
         let f_id = FormulaID(f_idx as u32);
-        //label_formula(f_id, structure, &model, &mut provider);
+        sat(f_id, symbolic_ctx, &model, &mut provider);
     }
 
     let mut results = Vec::new();
 
-    /*
     for &spec_id in &model.specs {
-        if let Some(marks_bitset) = provider.get_states_for_formula(spec_id) {
-            let initial = structure.get_initial_states();
-            let mut diff = initial.clone();
-            diff.difference_with(marks_bitset);
+        let sat_bdd = provider.get_bdd_for_formula(spec_id);
 
-            results.push(diff.count_ones(..) == 0);
-        } else {
-            results.push(false);
-        }
-    }*/
+        let initial_bdd = symbolic_ctx
+            .initial_states
+            .as_ref()
+            .expect("Error: initial states not compiled");
+
+        let holds = symbolic_ctx.manager.with_manager_shared(|_| {
+            let not_sat = sat_bdd.not().expect("OOM: not");
+
+            let violation_set = initial_bdd.and(&not_sat).expect("OOM: and");
+
+            !violation_set.satisfiable()
+        });
+
+        results.push(holds);
+    }
 
     results
 }
