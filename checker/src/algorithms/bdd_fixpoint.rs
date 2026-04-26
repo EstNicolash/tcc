@@ -9,7 +9,9 @@ use crate::modeling::bdd_compiler::eval_expr;
 use oxidd::bdd::BDDFunction;
 use oxidd::{BooleanFunction, BooleanFunctionQuant, BooleanOperator, ManagerRef};
 
+/// A provider for symbolic SAT queries using BDDs.
 pub struct SymbolicSatProvider {
+    /// The BDDs for each formula.
     pub bdds: Vec<BDDFunction>,
 }
 
@@ -213,7 +215,6 @@ fn sat(
             provider.set_bdd_for_formula(f_id, bdd.unwrap());
         }
 
-        // Add label if there is a neighbor that satisfies the subformula
         CtlFormula::EX(child) => {
             let child_bdd = provider.get_bdd_for_formula(*child);
             let subst_child_bdd = symbolic_ctx.shift_curr_to_next(child_bdd);
@@ -301,17 +302,18 @@ fn sat(
             provider.set_bdd_for_formula(f_id, sat_f);
         }
 
-        // Add label if all paths from a state satisfy f in some future
         _ => panic!("Error: Operator {:?} should be converted!", formula),
     }
 }
 
+/// Verifies the model using BDD fixpoint iteration.
 pub fn verify(symbolic_ctx: &SymbolicContext, mut model: Model) -> Vec<bool> {
     purify_model_specs(&mut model);
 
     let num_formulas = model.ctl_arena.len();
     let mut provider = SymbolicSatProvider::new(num_formulas);
 
+    // The formula arena is always ordered by subformulas due to the recursive insertion process.
     for f_idx in 0..num_formulas {
         let f_id = FormulaID(f_idx as u32);
         sat(f_id, symbolic_ctx, &model, &mut provider);
@@ -319,6 +321,9 @@ pub fn verify(symbolic_ctx: &SymbolicContext, mut model: Model) -> Vec<bool> {
 
     let mut results = Vec::new();
 
+    // All initial states must satisfy the formula (I ⊆ Sat(formula)).
+    // Therefore, the intersection between the initial states and the violating states (!Sat(formula)) must be empty.
+    // Property holds if no initial state violates the specification: I ∩ ¬Sat(formula) = ∅.
     for &spec_id in &model.specs {
         let sat_bdd = provider.get_bdd_for_formula(spec_id);
 

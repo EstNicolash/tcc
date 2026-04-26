@@ -17,7 +17,6 @@ fn setup_traffic_light() -> (KripkeStructure, Model) {
         domain: Domain::Range { min: 0, max: 2 },
     };
 
-    // 1. Defina a Proposição Simbólica (light == 2)
     let var_expr = {
         let id = SymbolicExprID(sym_arena.expressions.len() as u32);
         sym_arena.expressions.push(SymbolicExpr::Reference(0)); // Variável 0
@@ -38,9 +37,7 @@ fn setup_traffic_light() -> (KripkeStructure, Model) {
         id
     };
 
-    // 2. Construa a Kripke Structure
     let mut builder = KripkeBuilder::new(1);
-    // IMPORTANTE: Insira os estados e guarde os IDs
     let s0 = builder.states.get_or_insert(&vec![0]); // Green
     let s1 = builder.states.get_or_insert(&vec![1]); // Yellow
     let s2 = builder.states.get_or_insert(&vec![2]); // Red (Valor 2!)
@@ -52,7 +49,6 @@ fn setup_traffic_light() -> (KripkeStructure, Model) {
 
     let ks = KripkeStructure::from_builder(builder);
 
-    // 3. Monte o Modelo
     let prop_red = ctl_arena.insert(CtlFormula::Prop(is_red_expr));
     let spec0 = ctl_arena.insert(CtlFormula::EF(prop_red));
 

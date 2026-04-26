@@ -436,6 +436,7 @@ pub fn verify(structure: &KripkeStructure, mut model: Model) -> Vec<bool> {
     let num_formulas = model.ctl_arena.len();
     let mut provider = LabelingProvider::new(num_states, num_formulas);
 
+    // The formula arena is always ordered by subformulas due to the recursive insertion process.
     for f_idx in 0..num_formulas {
         let f_id = FormulaID(f_idx as u32);
         label_formula(f_id, structure, &model, &mut provider);
