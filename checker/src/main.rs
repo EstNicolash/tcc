@@ -51,6 +51,7 @@ fn main() {
         }
     }
 }
+
 fn run_verification(
     model_path: String,
     _spec_path: String,
@@ -61,7 +62,6 @@ fn run_verification(
         "{}",
         format!("--- Model Checker (Verify): {} ---", model_path.bold()).blue()
     );
-
     let total_start = Instant::now();
 
     let input_content = fs::read_to_string(&model_path).unwrap_or_else(|e| {
@@ -101,6 +101,9 @@ fn run_verification(
 
     print_milestone("Parse & IR Generation", phase_start);
 
+    let verify_start = Instant::now();
+
+    // [MILESTONE 2] Start verification timer
     let verify_start = Instant::now();
 
     let results = match algorithm {
