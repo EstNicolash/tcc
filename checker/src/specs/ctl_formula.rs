@@ -44,8 +44,6 @@ pub enum CtlFormula<P> {
 ///
 /// - `formula_arena`: A vector of CTL formulas stored in an arena allocator.
 /// - `formula_lookup`: A hash map used for fast lookup of `FormulaID` by `CtlFormula`.
-/// - `proposition_arena`: A vector of proposition names stored in an arena allocator.
-/// - `proposition_lookup`: A hash map used for fast lookup of `PropositionID` by `String`.
 pub struct CtlFormulaArena<P> {
     formula_arena: Vec<CtlFormula<P>>,
     formula_lookup: HashMap<CtlFormula<P>, FormulaID>,

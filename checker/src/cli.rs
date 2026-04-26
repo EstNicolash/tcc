@@ -50,4 +50,5 @@ pub enum InputFormat {
 pub enum Algorithm {
     Labelling,
     LabellingScc,
+    Bdd,
 }

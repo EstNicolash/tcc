@@ -1,10 +1,10 @@
 use crate::algorithms::labelling::LabelingProvider;
 use crate::core::kripke_structure::{KripkeStructure, StateID};
 use crate::modeling::expansion::eval;
-use crate::modeling::symbolic::{Model, SymbolicArena};
+use crate::modeling::symbolic::Model;
 use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
 use fixedbitset::FixedBitSet;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 /// Converts a CTL formula to its equivalent core form for the labelling algorithm.
 ///
@@ -429,6 +429,7 @@ pub fn verify(structure: &KripkeStructure, mut model: Model) -> Vec<bool> {
     let num_formulas = model.ctl_arena.len();
     let mut provider = LabelingProvider::new(num_states, num_formulas);
 
+    // The formula arena is always ordered by subformulas due to the recursive insertion process.
     for f_idx in 0..num_formulas {
         let f_id = FormulaID(f_idx as u32);
         label_formula(f_id, structure, &model, &mut provider);

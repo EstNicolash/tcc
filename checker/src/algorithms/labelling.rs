@@ -1,6 +1,6 @@
 use crate::core::kripke_structure::{KripkeStructure, StateID};
 use crate::modeling::expansion::eval;
-use crate::modeling::symbolic::{Model, SymbolicArena};
+use crate::modeling::symbolic::Model;
 use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
 use fixedbitset::FixedBitSet;
 use std::collections::HashMap;
@@ -74,7 +74,6 @@ fn convert_to_core<P: Copy + Eq + std::hash::Hash>(
 
     let formula = old_arena.get(f_id);
 
-    // Closure auxiliar para chamar a conversão limpamente
     let mut conv = |f| convert_to_core(f, old_arena, new_arena, memo);
 
     let new_id = match formula {
@@ -209,7 +208,6 @@ fn label_formula(
     let formula = model.ctl_arena.get(f_id);
     let num_states = structure.num_states();
 
-    // No caso CtlFormula::EU(f1, f2)
     match formula {
         CtlFormula::True => {
             let mut bitset = FixedBitSet::with_capacity(num_states);
@@ -438,6 +436,7 @@ pub fn verify(structure: &KripkeStructure, mut model: Model) -> Vec<bool> {
     let num_formulas = model.ctl_arena.len();
     let mut provider = LabelingProvider::new(num_states, num_formulas);
 
+    // The formula arena is always ordered by subformulas due to the recursive insertion process.
     for f_idx in 0..num_formulas {
         let f_id = FormulaID(f_idx as u32);
         label_formula(f_id, structure, &model, &mut provider);

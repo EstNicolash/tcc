@@ -62,8 +62,6 @@ fn run_verification(
         "{}",
         format!("--- Model Checker (Verify): {} ---", model_path.bold()).blue()
     );
-
-    // [MILESTONE 0] Start the global timer
     let total_start = Instant::now();
 
     let input_content = fs::read_to_string(&model_path).unwrap_or_else(|e| {
@@ -71,24 +69,9 @@ fn run_verification(
         process::exit(1);
     });
 
-    // [MILESTONE 1] Start parsing and expansion timer
     let phase_start = Instant::now();
 
-    let (ks, model, formula_strings) = match format {
-        InputFormat::Pnml => {
-            eprintln!(
-                "{} The PNML parser has not yet been adapted for the new Arenas architecture.",
-                "Not Implemented:".red().bold()
-            );
-            process::exit(1);
-        }
-        InputFormat::Prism => {
-            eprintln!(
-                "{} The Prism parser has not yet been adapted for the new Arenas architecture.",
-                "Not Implemented:".red().bold()
-            );
-            process::exit(1);
-        }
+    let (symbolic_model, formula_strings) = match format {
         InputFormat::Ssmv => {
             let ast = modeling::ssmv_parser::parse_ssmv(&input_content).unwrap_or_else(|e| {
                 eprintln!("{} {}", "SSMV Parser Error:".red().bold(), e);
@@ -103,45 +86,63 @@ fn run_verification(
                 strings.push(formatted);
             }
 
-            let symbolic_model = modeling::symbolic::build_model(ast);
-            let structure = modeling::expansion::expand_to_kripke(&symbolic_model);
-
-            (structure, symbolic_model, strings)
+            let model = modeling::symbolic::build_model(ast);
+            (model, strings)
+        }
+        _ => {
+            eprintln!(
+                "{} Format {:?} not supported yet in the new architecture.",
+                "Error:".red().bold(),
+                format
+            );
+            process::exit(1);
         }
     };
 
-    print_milestone("Parse & State Space Expansion", phase_start);
+    print_milestone("Parse & IR Generation", phase_start);
 
-    let num_states = ks.num_states();
-    let num_specs = model.specs.len();
-
-    println!(
-        "\n{} Model loaded via {:?} ({} states). {} formulas found.\n",
-        "✔".green(),
-        format,
-        num_states,
-        num_specs
-    );
-
-    if num_specs == 0 {
-        println!("{}", "No CTL formula found to verify. Exiting.".yellow());
-        return;
-    }
+    let verify_start = Instant::now();
 
     // [MILESTONE 2] Start verification timer
     let verify_start = Instant::now();
 
     let results = match algorithm {
-        Algorithm::Labelling => {
-            println!("{} Using Naive Labelling algorithm...", "ℹ".blue());
-            algorithms::labelling::verify(&ks, model)
+        Algorithm::Bdd => {
+            println!("{} Using Symbolic BDD algorithm (OxiDD)...", "ℹ".blue());
+
+            let symbolic_ctx = modeling::bdd_compiler::compile_model_to_bdd(&symbolic_model);
+            print_milestone("BDD Compilation (I & Delta)", verify_start);
+
+            algorithms::bdd_fixpoint::verify(&symbolic_ctx, symbolic_model)
         }
-        Algorithm::LabellingScc => {
+
+        Algorithm::Labelling | Algorithm::LabellingScc => {
             println!(
-                "{} Using SCC-based Labelling (Tarjan) algorithm...",
+                "{} Expanding state space for explicit algorithm...",
                 "ℹ".blue()
             );
-            algorithms::labelling_scc::verify(&ks, model)
+            let expansion_start = Instant::now();
+
+            let ks = modeling::expansion::expand_to_kripke(&symbolic_model);
+            print_milestone("State Space Expansion", expansion_start);
+
+            println!(
+                "{} Model expanded to {} states.",
+                "✔".green(),
+                ks.num_states()
+            );
+
+            match algorithm {
+                Algorithm::Labelling => {
+                    println!("{} Using Naive Labelling algorithm...", "ℹ".blue());
+                    algorithms::labelling::verify(&ks, symbolic_model)
+                }
+                Algorithm::LabellingScc => {
+                    println!("{} Using SCC-based Labelling (Tarjan)...", "ℹ".blue());
+                    algorithms::labelling_scc::verify(&ks, symbolic_model)
+                }
+                _ => unreachable!(),
+            }
         }
     };
 
