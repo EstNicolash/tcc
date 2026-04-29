@@ -37,6 +37,9 @@
             graphviz
             perf
             hyperfine
+            time
+            nusmv
+            python314
           ];
 
           shellHook = ''
