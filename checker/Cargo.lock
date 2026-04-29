@@ -412,8 +412,6 @@ dependencies = [
  "oxidd-manager-index",
  "oxidd-reorder",
  "oxidd-rules-bdd",
- "oxidd-rules-mtbdd",
- "oxidd-rules-tdd",
  "oxidd-rules-zbdd",
  "rustc-hash",
 ]
@@ -504,31 +502,6 @@ checksum = "c56b5465552bdc2c1f38c433f8751703d1561396f4be16315999cc47eed6e2ce"
 dependencies = [
  "document-features",
  "fixedbitset",
- "oxidd-core",
- "oxidd-derive",
- "oxidd-dump",
-]
-
-[[package]]
-name = "oxidd-rules-mtbdd"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49740035de417b58fad2fe420b5539081604e601c266841f3092ca8bb5db1da7"
-dependencies = [
- "document-features",
- "fixedbitset",
- "oxidd-core",
- "oxidd-derive",
- "oxidd-dump",
-]
-
-[[package]]
-name = "oxidd-rules-tdd"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb13c585037127f6066e3ca928e96bdc21df19a41b0242dfcb9e95faf723558c"
-dependencies = [
- "document-features",
  "oxidd-core",
  "oxidd-derive",
  "oxidd-dump",
