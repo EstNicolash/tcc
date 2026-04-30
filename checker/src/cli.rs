@@ -21,11 +21,11 @@ pub enum Commands {
         spec_path: String,
 
         /// Format of the model input
-        #[arg(short, long, value_enum, default_value_t = InputFormat::Pnml)]
+        #[arg(short, long, value_enum, default_value_t = InputFormat::Ssmv)]
         format: InputFormat,
 
         /// Algorithm to use for verification
-        #[arg(short, long, value_enum, default_value_t = Algorithm::Labelling)]
+        #[arg(short, long, value_enum, default_value_t = Algorithm::Bdd)]
         algorithm: Algorithm,
     },
 

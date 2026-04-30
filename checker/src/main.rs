@@ -138,7 +138,12 @@ fn run_verification(
             record.compilation_time_ms = compile_start.elapsed().as_millis();
             print_milestone("BDD Compilation", compile_start.elapsed());
 
-            let results = algorithms::bdd_fixpoint::verify(&symbolic_ctx, symbolic_model);
+            let results = algorithms::bdd_fixpoint::verify(&symbolic_ctx, symbolic_model)
+                .unwrap_or_else(|e| {
+                    eprintln!("{} Verification failed: {}", "✘".red(), e);
+                    std::process::exit(1);
+                });
+
             record.verification_nodes = symbolic_ctx
                 .manager
                 .with_manager_shared(|m| m.num_inner_nodes());
