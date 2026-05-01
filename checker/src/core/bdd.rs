@@ -4,14 +4,31 @@ use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
 use oxidd::{BooleanFunction, FunctionSubst, Manager, ManagerRef, Subst, VarNo};
 
+/// A context for symbolic BDD operations, managing variable mappings and formal structures.
+///
+/// This context acts as the bridge between the high-level CTL formulas and the
+/// low-level BDD representations, handling variable ordering and state transitions.
 pub struct SymbolicContext {
+    /// The OxiDD manager that handles node allocation.
     pub manager: BDDManagerRef,
+
+    /// Maps each model variable to its corresponding bit indices for current and next states.
     pub var_map: Vec<VarBits>,
+
+    /// BDD representing the set of initial states: I(s).
     pub initial_states: Option<BDDFunction>,
+
+    /// BDD representing the transition relation: Delta(s, s').
     pub transition_relation: Option<BDDFunction>,
 
+    /// Internal list of variable indices for the current state (used for substitution).
     curr_ids: Vec<VarNo>,
+
+    /// Internal BDD functions for the next state variables (used for substitution).
     next_bdds: Vec<BDDFunction>,
+
+    /// The conjunction of all next-state variables. Used as a 'cube' for existential
+    /// quantification in the EX, EU, and EG operators.
     pub next_vars_cube: BDDFunction,
 }
 
@@ -21,6 +38,11 @@ pub struct VarBits {
 }
 
 impl SymbolicContext {
+    /// Creates a new symbolic context from the given model.
+    ///
+    /// Initializes the BDD manager and builds the variable map.
+    /// The variables are ordered by their index in the model.
+    /// Each model variable is mapped to two BDD variable, one for the current state and one for the next state.
     pub fn new(model: &Model) -> Self {
         let manager = oxidd::bdd::new_manager(2_000_000, 1_000_000, 1);
 
@@ -77,22 +99,49 @@ impl SymbolicContext {
             next_vars_cube,
         }
     }
-
+    /// Computes the relational shift f[s -> s'].
+    ///
+    /// Replaces all current-state variables in the BDD with their next-state counterparts.
+    /// This is a fundamental operation for computing the image of a set of states.
+    ///
+    /// # Panics
+    /// Panics if the substitution operation fails within the OxiDD manager.
     pub fn shift_curr_to_next(&self, bdd: &BDDFunction) -> BDDFunction {
         let subst = Subst::new(&self.curr_ids, &self.next_bdds);
         bdd.substitute(&subst).expect("Substitution failed")
     }
 }
 
-fn calc_bits(states: usize) -> usize {
-    if states <= 1 {
+/// Calculates the number of bits required to represent a given domain size.
+///
+/// This is used to determine the number of BDD variables needed for representation of ssmv variable.
+///
+/// # Arguments
+///
+/// * `domain_size` - The size of the domain to represent.
+///
+/// # Examples
+///
+/// # Returns
+/// The number of bits required to represent the domain size.
+fn calc_bits(domain_size: usize) -> usize {
+    if domain_size <= 1 {
         1
     } else {
-        (states as f64).log2().ceil() as usize
+        (domain_size as f64).log2().ceil() as usize
     }
 }
 
 /// Full Adder: Returns the bitwise sum of two numbers using a full adder
+///
+/// # Arguments
+///
+/// * `a` - The first operand.
+/// * `b` - The second operand.
+/// * `carry_in` - The carry input.
+///
+/// # Returns
+/// The result of the full adder as a tuple of BDD functions.
 pub fn bdd_full_adder(
     a: &BDDFunction,
     b: &BDDFunction,
@@ -110,6 +159,15 @@ pub fn bdd_full_adder(
     (sum, carry_out)
 }
 /// Ripple Carry Adder: Returns the bitwise sum of two numbers using a ripple carry adder
+///
+/// # Arguments
+///
+/// * `lhs` - The left-hand side operand (A).
+/// * `rhs` - The right-hand side operand (B).
+/// * `manager` - The BDD manager reference.
+///
+/// # Returns
+/// The result of the ripple carry adder as a vector of BDD functions.
 pub fn ripple_carry_adder(
     lhs: &[BDDFunction],
     rhs: &[BDDFunction],
@@ -131,6 +189,15 @@ pub fn ripple_carry_adder(
 }
 
 /// Equal (A == B): Returns True if A and B are bitwise equal
+///
+/// # Arguments
+///
+/// * `lhs` - The left-hand side operand (A).
+/// * `rhs` - The right-hand side operand (B).
+/// * `manager` - The BDD manager reference.
+///
+/// # Returns
+/// The result of the equality comparison as a BDD function.
 pub fn bdd_number_eq(
     lhs: &[BDDFunction],
     rhs: &[BDDFunction],
@@ -147,6 +214,15 @@ pub fn bdd_number_eq(
     result
 }
 /// Subtract (A - B): Returns the bitwise subtraction of B from A
+///
+/// # Arguments
+///
+/// * `lhs` - The left-hand side operand (A).
+/// * `rhs` - The right-hand side operand (B).
+/// * `manager` - The BDD manager reference.
+///
+/// # Returns
+/// The result of the subtraction as a vector of BDD functions.
 pub fn bdd_number_sub(
     lhs: &[BDDFunction],
     rhs: &[BDDFunction],
@@ -171,6 +247,15 @@ pub fn bdd_number_sub(
 }
 
 /// Greater Than (A > B): Returns True if A is strictly greater than B
+///
+/// # Arguments
+///
+/// * `lhs` - The left-hand side operand (A).
+/// * `rhs` - The right-hand side operand (B).
+/// * `manager` - The BDD manager reference.
+///
+/// # Returns
+/// The result of the greater than comparison as a BDD function.
 pub fn bdd_number_gt(
     lhs: &[BDDFunction],
     rhs: &[BDDFunction],
@@ -195,6 +280,15 @@ pub fn bdd_number_gt(
 }
 
 /// Not Equal (A != B): Simply NOT(A == B)
+///
+/// # Arguments
+///
+/// * `lhs` - The left-hand side operand (A).
+/// * `rhs` - The right-hand side operand (B).
+/// * `manager` - The BDD manager reference.
+///
+/// # Returns
+/// The result of the not equal comparison as a BDD function.
 pub fn bdd_number_neq(
     lhs: &[BDDFunction],
     rhs: &[BDDFunction],
@@ -204,6 +298,15 @@ pub fn bdd_number_neq(
 }
 
 /// Less Than (A < B): Equivalent to (B > A)
+///
+/// # Arguments
+///
+/// * `lhs` - The left-hand side operand (A).
+/// * `rhs` - The right-hand side operand (B).
+/// * `manager` - The BDD manager reference.
+///
+/// # Returns
+/// The result of the less than comparison as a BDD function.
 pub fn bdd_number_lt(
     lhs: &[BDDFunction],
     rhs: &[BDDFunction],
@@ -213,6 +316,15 @@ pub fn bdd_number_lt(
 }
 
 /// Less Than or Equal (A <= B): Equivalent to NOT(A > B)
+///
+/// # Arguments
+///
+/// * `lhs` - The left-hand side operand (A).
+/// * `rhs` - The right-hand side operand (B).
+/// * `manager` - The BDD manager reference.
+///
+/// # Returns
+/// The result of the less than or equal comparison as a BDD function.
 pub fn bdd_number_lte(
     lhs: &[BDDFunction],
     rhs: &[BDDFunction],
@@ -222,6 +334,15 @@ pub fn bdd_number_lte(
 }
 
 /// Greater Than or Equal (A >= B): Equivalent to NOT(A < B)
+///
+/// # Arguments
+///
+/// * `lhs` - The left-hand side operand (A).
+/// * `rhs` - The right-hand side operand (B).
+/// * `manager` - The BDD manager reference.
+///
+/// # Returns
+/// The result of the greater than or equal comparison as a BDD function.
 pub fn bdd_number_gte(
     lhs: &[BDDFunction],
     rhs: &[BDDFunction],

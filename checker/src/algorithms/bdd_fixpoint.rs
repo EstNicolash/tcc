@@ -10,31 +10,53 @@ use oxidd::bdd::BDDFunction;
 use oxidd::{BooleanFunction, BooleanFunctionQuant, BooleanOperator, ManagerRef};
 
 /// A provider for symbolic SAT queries using BDDs.
+/// Just stores the BDDs for each formula for use in SAT queries.
 pub struct SymbolicSatProvider {
     /// The BDDs for each formula.
     pub bdds: Vec<BDDFunction>,
 }
 
 impl SymbolicSatProvider {
+    /// Creates a new `SymbolicSatProvider` with the specified number of formulas.
     pub fn new(num_formulas: usize) -> Self {
         Self {
             bdds: Vec::with_capacity(num_formulas),
         }
     }
 
+    /// Sets the BDD for the specified formula.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula_id` - The ID of the formula to set the BDD for.
+    /// * `bdd` - The BDD representation of the formula.
+
     pub fn set_bdd_for_formula(&mut self, formula_id: FormulaID, bdd: BDDFunction) {
-        if (formula_id.0 as usize) < self.bdds.len() {
-            self.bdds[formula_id.0 as usize] = bdd;
-        } else {
-            self.bdds.push(bdd);
+        let idx = formula_id.0 as usize;
+        if idx >= self.bdds.len() {
+            self.bdds.resize(idx + 1, bdd.clone());
         }
+        self.bdds[idx] = bdd;
     }
 
+    /// Returns a reference to the BDD for the specified formula.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula_id` - The ID of the formula to get the BDD for.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the formula BDD has not been set.
     pub fn get_bdd_for_formula(&self, formula_id: FormulaID) -> &BDDFunction {
-        &self.bdds[formula_id.0 as usize]
+        self.bdds
+            .get(formula_id.0 as usize)
+            .expect("Attempted to access a formula BDD that was never set.")
     }
 }
 /// Converts a CTL formula to its equivalent core form for the bdd algorithm.
+///
+///
 ///
 /// # Arguments
 ///
@@ -142,77 +164,94 @@ pub fn purify_model_specs(model: &mut Model) {
     model.specs = core_specs;
 }
 
-/// Construct a BDD (Sat(f)) for the given CTL formula.
+/// Constructs the BDD representing the set of states that satisfy a CTL formula (Sat(f)).
 ///
 /// # Arguments
+/// * `f_id` - The unique identifier of the CTL formula in the arena.
+/// * `symbolic_ctx` - The context providing BDD variables and transition relations.
+/// * `model` - The system model containing the formula arena.
+/// * `provider` - A memoization store for subformula BDDs.
 ///
+/// # Errors
+/// Returns an error if BDD operations fail (e.g., Out of Memory) or if the
+/// transition relation is missing.
+/// Constructs a BDD (Sat(f)) for the given CTL formula.
+///
+/// This implements the recursive symbolic labelling algorithm.
+///
+/// # Arguments
 /// * `f_id` - The ID of the CTL formula to construct the BDD for.
 /// * `symbolic_ctx` - The symbolic context containing the BDD manager.
-/// * `model` - The model
-/// * `provider` - The provider to add the BDD to.
-///
+/// * `model` - The system model.
+/// * `provider` - The provider to store and retrieve subformula BDDs.
 fn sat(
     f_id: FormulaID,
     symbolic_ctx: &SymbolicContext,
     model: &Model,
     provider: &mut SymbolicSatProvider,
-) {
+) -> Result<(), String> {
     let formula = model.ctl_arena.get(f_id);
 
-    match formula {
-        CtlFormula::True => {
-            let bdd = symbolic_ctx
-                .manager
-                .with_manager_shared(|m| BDDFunction::t(m));
+    // Each match arm MUST return Result<BDDFunction, String>
+    let bdd = match formula {
+        CtlFormula::True => Ok(symbolic_ctx
+            .manager
+            .with_manager_shared(|m| BDDFunction::t(m))),
 
-            provider.set_bdd_for_formula(f_id, bdd);
-        }
-        CtlFormula::False => {
-            let bdd = symbolic_ctx
-                .manager
-                .with_manager_shared(|m| BDDFunction::f(m));
-            provider.set_bdd_for_formula(f_id, bdd);
-        }
+        CtlFormula::False => Ok(symbolic_ctx
+            .manager
+            .with_manager_shared(|m| BDDFunction::f(m))),
 
         CtlFormula::Prop(sym_expr_id) => {
             let bdd_expr_vec = eval_expr(symbolic_ctx, *sym_expr_id, model);
-            let bdd_expr = bdd_expr_vec.into_iter().next().unwrap(); //A propostiion always has a single BDD expression (boolean expression)
-            provider.set_bdd_for_formula(f_id, bdd_expr);
+            bdd_expr_vec
+                .into_iter()
+                .next()
+                .ok_or_else(|| format!("Empty expression for proposition {:?}", sym_expr_id))
         }
 
         CtlFormula::Not(sf) => {
-            let bdd = provider.get_bdd_for_formula(*sf);
-            let bdd = symbolic_ctx.manager.with_manager_shared(|_| bdd.not());
-            provider.set_bdd_for_formula(f_id, bdd.unwrap());
+            let inner = provider.get_bdd_for_formula(*sf);
+            symbolic_ctx
+                .manager
+                .with_manager_shared(|_| inner.not())
+                .map_err(|e| format!("OOM during NOT operation: {:?}", e))
         }
 
         CtlFormula::And(f1, f2) => {
             let bdd1 = provider.get_bdd_for_formula(*f1);
             let bdd2 = provider.get_bdd_for_formula(*f2);
-            let bdd = symbolic_ctx.manager.with_manager_shared(|_| bdd1.and(bdd2));
-            provider.set_bdd_for_formula(f_id, bdd.unwrap());
+            symbolic_ctx
+                .manager
+                .with_manager_shared(|_| bdd1.and(bdd2))
+                .map_err(|e| format!("OOM during AND operation: {:?}", e))
         }
 
         CtlFormula::Or(f1, f2) => {
             let bdd1 = provider.get_bdd_for_formula(*f1);
             let bdd2 = provider.get_bdd_for_formula(*f2);
-            let bdd = symbolic_ctx.manager.with_manager_shared(|_| bdd1.or(bdd2));
-            provider.set_bdd_for_formula(f_id, bdd.unwrap());
+            symbolic_ctx
+                .manager
+                .with_manager_shared(|_| bdd1.or(bdd2))
+                .map_err(|e| format!("OOM during OR operation: {:?}", e))
         }
 
         CtlFormula::Imply(f1, f2) => {
             let bdd1 = provider.get_bdd_for_formula(*f1);
             let bdd2 = provider.get_bdd_for_formula(*f2);
-            let bdd = symbolic_ctx.manager.with_manager_shared(|_| bdd1.imp(bdd2));
-            provider.set_bdd_for_formula(f_id, bdd.unwrap());
+            symbolic_ctx
+                .manager
+                .with_manager_shared(|_| bdd1.imp(bdd2))
+                .map_err(|e| format!("OOM during IMPLY operation: {:?}", e))
         }
+
         CtlFormula::Iff(f1, f2) => {
             let bdd1 = provider.get_bdd_for_formula(*f1);
             let bdd2 = provider.get_bdd_for_formula(*f2);
-            let bdd = symbolic_ctx
+            symbolic_ctx
                 .manager
-                .with_manager_shared(|_| bdd1.equiv(bdd2));
-            provider.set_bdd_for_formula(f_id, bdd.unwrap());
+                .with_manager_shared(|_| bdd1.equiv(bdd2))
+                .map_err(|e| format!("OOM during IFF operation: {:?}", e))
         }
 
         CtlFormula::EX(child) => {
@@ -222,51 +261,56 @@ fn sat(
             let delta = symbolic_ctx
                 .transition_relation
                 .as_ref()
-                .expect("Transition relation not compiled")
-                .clone();
+                .ok_or_else(|| "Transition relation not compiled".to_string())?;
 
-            let bdd = symbolic_ctx.manager.with_manager_shared(|_| {
-                delta.apply_exists(
-                    BooleanOperator::And,
-                    &subst_child_bdd,
-                    &symbolic_ctx.next_vars_cube,
-                )
-            });
-
-            provider.set_bdd_for_formula(f_id, bdd.unwrap());
+            // Compute EX(sat_f) using existential quantification over next-state variables
+            symbolic_ctx
+                .manager
+                .with_manager_shared(|_| {
+                    delta.apply_exists(
+                        BooleanOperator::And,
+                        &subst_child_bdd,
+                        &symbolic_ctx.next_vars_cube,
+                    )
+                })
+                .map_err(|e| format!("OOM during EX operation: {:?}", e))
         }
 
         CtlFormula::EU(f1, f2) => {
-            let mut sat_f = provider.get_bdd_for_formula(*f2).clone(); // f0 = B
-            let sat_f1 = provider.get_bdd_for_formula(*f1).clone();
+            let mut sat_f = provider.get_bdd_for_formula(*f2).clone(); // f0 = B (initial seed)
+            let sat_f1 = provider.get_bdd_for_formula(*f1);
 
-            let delta = symbolic_ctx.transition_relation.as_ref().expect("").clone();
+            let delta = symbolic_ctx
+                .transition_relation
+                .as_ref()
+                .ok_or_else(|| "Transition relation not compiled".to_string())?;
 
+            // Least Fixed Point iteration for EU
             loop {
                 let subst_sat_f = symbolic_ctx.shift_curr_to_next(&sat_f);
 
-                // EX(sat_f)
+                // Compute EX(sat_f)
                 let ex_sat_f = delta
                     .apply_exists(
                         BooleanOperator::And,
                         &subst_sat_f,
                         &symbolic_ctx.next_vars_cube,
                     )
-                    .expect("OOM: apply_exists");
+                    .map_err(|e| format!("OOM during EU apply_exists: {:?}", e))?;
 
-                // f_{j+1} = f_j | (C & EX(f_j))
+                // Fixed point step: f_{j+1} = f_j | (f1 & EX(f_j))
                 let next_sat = sat_f1
                     .and(&ex_sat_f)
-                    .expect("OOM: and")
+                    .map_err(|e| format!("OOM during EU and: {:?}", e))?
                     .or(&sat_f)
-                    .expect("OOM: or");
+                    .map_err(|e| format!("OOM during EU or: {:?}", e))?;
 
                 if next_sat == sat_f {
                     break;
                 }
                 sat_f = next_sat;
             }
-            provider.set_bdd_for_formula(f_id, sat_f);
+            Ok(sat_f)
         }
 
         CtlFormula::EG(sf) => {
@@ -275,22 +319,25 @@ fn sat(
             let delta = symbolic_ctx
                 .transition_relation
                 .as_ref()
-                .expect("Transition relation not compiled")
-                .clone();
+                .ok_or_else(|| "Transition relation not compiled".to_string())?;
 
+            // Greatest Fixed Point iteration for EG
             loop {
                 let subst_sat_f = symbolic_ctx.shift_curr_to_next(&sat_f);
 
-                // 1.EX(sat_f)
+                // Compute EX(sat_f)
                 let ex_sat_f = delta
                     .apply_exists(
                         BooleanOperator::And,
                         &subst_sat_f,
                         &symbolic_ctx.next_vars_cube,
                     )
-                    .expect("OOM: apply_exists");
+                    .map_err(|e| format!("OOM during EG apply_exists: {:?}", e))?;
 
-                let next_sat = sat_f.and(&ex_sat_f).expect("OOM: and");
+                // Fixed point step: f_{j+1} = f_j & EX(f_j)
+                let next_sat = sat_f
+                    .and(&ex_sat_f)
+                    .map_err(|e| format!("OOM during EG and: {:?}", e))?;
 
                 if next_sat == sat_f {
                     break;
@@ -298,50 +345,66 @@ fn sat(
 
                 sat_f = next_sat;
             }
-
-            provider.set_bdd_for_formula(f_id, sat_f);
+            Ok(sat_f)
         }
 
-        _ => panic!("Error: Operator {:?} should be converted!", formula),
-    }
+        _ => {
+            return Err(format!(
+                "Error: Operator {:?} should be converted!",
+                formula
+            ));
+        }
+    }?; // The final '?' unpacks the Result into a bare BDDFunction
+
+    provider.set_bdd_for_formula(f_id, bdd);
+    Ok(())
 }
 
 /// Verifies the model using BDD fixpoint iteration.
-pub fn verify(symbolic_ctx: &SymbolicContext, mut model: Model) -> Vec<bool> {
+///
+/// # Arguments
+///
+/// * `symbolic_ctx` - The symbolic context.
+/// * `model` - The model to verify.
+///
+/// # Returns
+///
+/// A vector of boolean results, one for each specification.
+pub fn verify(symbolic_ctx: &SymbolicContext, mut model: Model) -> Result<Vec<bool>, String> {
     purify_model_specs(&mut model);
 
     let num_formulas = model.ctl_arena.len();
     let mut provider = SymbolicSatProvider::new(num_formulas);
 
     // The formula arena is always ordered by subformulas due to the recursive insertion process.
-    for f_idx in 0..num_formulas {
+    (0..num_formulas).try_for_each(|f_idx| {
         let f_id = FormulaID(f_idx as u32);
-        sat(f_id, symbolic_ctx, &model, &mut provider);
-    }
+        sat(f_id, symbolic_ctx, &model, &mut provider)
+    })?;
 
-    let mut results = Vec::new();
+    let initial_bdd = symbolic_ctx
+        .initial_states
+        .as_ref()
+        .ok_or_else(|| "Error: initial states not compiled".to_string())?;
 
     // All initial states must satisfy the formula (I ⊆ Sat(formula)).
     // Therefore, the intersection between the initial states and the violating states (!Sat(formula)) must be empty.
     // Property holds if no initial state violates the specification: I ∩ ¬Sat(formula) = ∅.
-    for &spec_id in &model.specs {
-        let sat_bdd = provider.get_bdd_for_formula(spec_id);
+    model
+        .specs
+        .iter()
+        .map(|&spec_id| {
+            let sat_bdd = provider.get_bdd_for_formula(spec_id);
 
-        let initial_bdd = symbolic_ctx
-            .initial_states
-            .as_ref()
-            .expect("Error: initial states not compiled");
+            symbolic_ctx.manager.with_manager_shared(|_| {
+                let not_sat = sat_bdd.not().map_err(|_| "OOM: not")?;
 
-        let holds = symbolic_ctx.manager.with_manager_shared(|_| {
-            let not_sat = sat_bdd.not().expect("OOM: not");
+                let violation_set = initial_bdd
+                    .and(&not_sat)
+                    .map_err(|_| "OOM during verification intersection".to_string())?;
 
-            let violation_set = initial_bdd.and(&not_sat).expect("OOM: and");
-
-            !violation_set.satisfiable()
-        });
-
-        results.push(holds);
-    }
-
-    results
+                Ok(!violation_set.satisfiable())
+            })
+        })
+        .collect::<Result<Vec<bool>, String>>()
 }
