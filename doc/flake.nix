@@ -13,12 +13,10 @@
         
         tex = pkgs.texlive.combine {
           inherit (pkgs.texlive) 
-            scheme-medium 
+            scheme-full
             abntex2 
-            babel-portuguese 
+            babel-portuges
             newtx 
-            titlesec tocloft fancyhdr xcolor graphicx caption 
-            hyperref lastpage indentfirst setspace geometry
             latexmk; 
         };
       in

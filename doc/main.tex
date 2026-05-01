@@ -1,0 +1,72 @@
+\documentclass[cic,tc]{infufrgs}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs} 
+\usepackage{amsmath} 
+
+
+\title{Lorem Ipsum}
+\translatedtitle{Development of a Symbolic Model Checker in Rust}
+
+\author{Ipsum}{Lorem} 
+\advisor[Prof.~Dr.]{Lorem}{Ipsum} 
+
+\date{Abril}{2026}
+
+\keyword{Verificação Formal}
+\keyword{BDDs}
+\keyword{Rust}
+\translatedkeyword{Formal Verification}
+\translatedkeyword{BDDs}
+\translatedkeyword{Rust}
+
+
+\begin{document}
+	
+	\maketitle
+	
+	\begin{abstract}
+		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+	\end{abstract}
+	
+	\begin{translatedabstract}
+		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+	\end{translatedabstract}
+	
+	\tableofcontents
+	\listoffigures
+	\listoftables
+	
+	\chapter{Introdução}
+	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+	
+	\chapter{Fundamentação Teórica}
+	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+	
+	\begin{equation}
+		M, s \models EX \phi \iff \exists s' \in S \text{ tal que } (s, s') \in R \land M, s' \models \phi
+	\end{equation}
+	
+	\chapter{Resultados Experimentais}
+	Os testes foram realizados comparando o SSMV com o NuSMV \cite{cimatti2002nusmv}. Os resultados estão resumidos na Tabela \ref{tab:bench}.
+	
+	\begin{table}[ht]
+		\centering
+		\caption{Comparativo de Performance}
+		\label{tab:bench}
+		\begin{tabular}{@{}lccc@{}}
+			\toprule
+			\textbf{Ferramenta} & \textbf{Tempo (ms)} & \textbf{Nós BDD} & \textbf{Memória (MB)} \\ \midrule
+			SSMV (BDD)          & 1.918               & 1.815.465        & 90,3                  \\
+			NuSMV               & 6.998               & 482.151          & 65,6                  \\ \bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\chapter{Conclusão}
+	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+	
+
+	\bibliographystyle{abntex2-alf}
+	\bibliography{references}
+	
+\end{document}
