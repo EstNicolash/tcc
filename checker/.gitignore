@@ -1,6 +1,8 @@
+*.csv
+*.nusmv
+
 /target/
 
 .direnv/
 result
 result-*
-
