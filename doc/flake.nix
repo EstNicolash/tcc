@@ -25,6 +25,7 @@
           buildInputs = [
             tex
             pkgs.texstudio
+            pkgs.zotero
           ];
 
           shellHook = ''
