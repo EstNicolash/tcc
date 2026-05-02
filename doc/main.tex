@@ -1,9 +1,38 @@
 \documentclass[cic,tc]{infufrgs}
 \usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
 \usepackage{graphicx}
 \usepackage{booktabs} 
 \usepackage{amsmath} 
+%\usepackage{amssymb, amsthm} % Removido para evitar conflito com newtxmath da classe
+\usepackage{hyperref}
 
+% --- Pacotes para Algoritmos e Código (Adicionados) ---
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Configuração para código (Rust/SMV)
+\lstset{
+	basicstyle=\ttfamily\small,
+	keywordstyle=\color{blue},
+	commentstyle=\color{gray},
+	stringstyle=\color{orange},
+	breaklines=true,
+	frame=single,
+	captionpos=b
+}
+
+% --- Pacote para Desenhar BDDs (TikZ e bibliotecas) ---
+\usepackage{tikz}
+\usetikzlibrary{arrows,positioning,shapes}
+
+% --- Comandos Personalizados ---
+\newcommand{\sat}[1]{\text{Sat}(#1)}
+\newcommand{\ex}{\text{EX}}
+\newcommand{\eu}{\text{EU}}
+\newcommand{\eg}{\text{EG}}
 
 \title{Lorem Ipsum}
 \translatedtitle{Development of a Symbolic Model Checker in Rust}
@@ -19,7 +48,6 @@
 \translatedkeyword{Formal Verification}
 \translatedkeyword{BDDs}
 \translatedkeyword{Rust}
-
 
 \begin{document}
 	
@@ -47,6 +75,430 @@
 		M, s \models EX \phi \iff \exists s' \in S \text{ tal que } (s, s') \in R \land M, s' \models \phi
 	\end{equation}
 	
+	\section{Estruturas de Kripke}
+	Uma estrutura de Kripke (ou um sistema de transição) é uma tupla $(S, R, I,AP, L)$ onde:
+	\begin{itemize}
+		\item $S$ é um conjunto finito de \textbf{estados} (ou mundos possíveis).
+		\item $R \subseteq S \times S$ é uma \textbf{relação de acessibilidade} total (para cada $s \in S$, existe $s' \in S$ tal que $(s, s')\in R$).
+		\item $I \subseteq S$ é o conjunto de \textbf{estados iniciais}.
+		\item $AP$ é um conjunto finito de \textbf{proposições atômicas}.
+		\item $L: S \to 2^{AP}$ é uma \textbf{função de rotulação} que associa a cada estado o conjunto de proposições que nele são verdadeiras.
+	\end{itemize}
+	
+	\section{Switching Functions}
+	A verificação simbólica opera sobre conjuntos de estados representados por funções boolianas.
+	
+	\subsection*{Variáveis e avaliações:}
+	Seja um conjunto de variáveis boolianas $Var = \{x_1,x_2,x_3,...,x_n\}$. Uma \textbf{avaliação} (do conjunto) é uma atribuição de valores booleanos (0 ou 1) às variáveis (do conjunto), ou seja, uma avaliação é um função $\eta: Var\mapsto \{0,1\}$. $Eval(Var)$ é o conjunto de \textbf{todas as avaliações (do conjunto de variáveis)}.
+	
+	\subsection*{Switching Functions}
+	Uma \textbf{switching function} é uma função $f: Eval(Var) \mapsto \{0,1\}$. No contexto de verificação, a \textbf{função característica} $\chi_T$ para representar um subconjunto de estados $T \subseteq S$:
+	\begin{equation}
+		\chi_T(s) = 1 \iff s \in T
+	\end{equation}
+	Desta forma, operações sobre conjuntos (união, interseção, etc) são realizadas por operações lógicas ($\lor$,$\land$, etc.) sobre \textbf{switching functions}.  
+	
+	\subsection*{Cofatores}
+	Um cofator de uma função $f$ é como fixasse uma das variáveis com um valor booliano. Seja $f:Eval(y,x_1,x_2,...,x_n)\to\{0,1\}$,  cofator positivo é $f|_{x=1}:Eval(1,x_1,x_2,...,x_n)\to\{0,1\}$ e o cofator negativo é $f|_{x=0}:Eval(0,x_1,x_2,...,x_n)\to\{0,1\}$. Caso $f|_{x=1}\neq f|_{x=0}$, $x$ é considerado uma \textbf{variável essencial}.
+	
+	\subsection*{Quantificadores}
+	\begin{equation}
+		\exists x.f = f|_{x=0}\lor f |_{x=1}
+	\end{equation}
+	\begin{equation}
+		\forall x.f = f|_{x=0}\land f |_{x=1}\\
+	\end{equation}
+	
+	\subsection*{Operação de renomeação}
+	Exemplo: seja $f = x \land(\neg x\lor y)$. Renomeando $x$ para $x'$ temos:
+	$f\{x\gets x'\} = x' \land(\neg x'\lor y)$.
+	
+	\section{Binary Decision Trees}
+	\section{Binary Decision Diagram}
+	
+	Seja um conjunto de variáveis $Var =\{x_1,x_2,...,x_n\}$. Um \textit{Binary Decision Diagram} é uma tupla $(V,V_I,V_T,succ_0,succ_1,var,val,v_0)$ em que temos:
+	\begin{itemize}
+		\item Um conjunto finito de nós $V$.
+		\item Os conjuntos $V_I\subset V$ e $V_T\subset V$ tal que $V_I$ são os nós internos, $V_T$ são nós terminais e $V_I\cap V_T=\emptyset$.
+		\item As funções de sucessores $succ_0: V_I\to V$ e  $succ_1: V_I\to V$.
+		\item A função de atribuição de nós internos a variáveis $var: V_I\to Var$.
+		\item A função de atribuição de valores boolianos a nós terminais $val: V_T\to \{0,1\}$.
+		\item Um nó raiz $v_0$ em que $\neg\exists x(succ_1(x)=v_0\lor succ_0(x)=v_0)$.
+	\end{itemize}
+	
+	\textbf{Exemplo 1: Árvore de Decisão}\\
+	Uma árvore de decisão binária é um caso particular de BDD. Abaixo, a representação da função $f = x_1 \land x_2$:
+	
+	\begin{center}
+		\begin{tikzpicture}[node distance=1.5cm, >=stealth, bend angle=45, auto]
+			% Nós Internos
+			\node[circle,draw] (v0) {$x_1$};
+			\node[circle,draw, below left=1cm and 0.5cm of v0] (v1) {$x_2$};
+			\node[circle,draw, below right=1cm and 0.5cm of v0] (v2) {$x_2$};
+			
+			% Nós Terminais
+			\node[rectangle,draw, below left=1cm and 0.2cm of v1] (t0) {0};
+			\node[rectangle,draw, below right=1cm and 0.2cm of v1] (t1) {0};
+			\node[rectangle,draw, below left=1cm and 0.2cm of v2] (t2) {0};
+			\node[rectangle,draw, below right=1cm and 0.2cm of v2] (t3) {1};
+			
+			% Arestas (Dashed = 0, Solid = 1)
+			\draw[->, dashed] (v0) -- (v1);
+			\draw[->] (v0) -- (v2);
+			
+			\draw[->, dashed] (v1) -- (t0);
+			\draw[->] (v1) -- (t1);
+			
+			\draw[->, dashed] (v2) -- (t2);
+			\draw[->] (v2) -- (t3);
+		\end{tikzpicture}
+	\end{center}
+	
+	\textbf{Exemplo 2: BDD Não Ordenado}\\
+	Em um BDD não ordenado para a função $f = x\lor y$
+	
+	\begin{center}
+		\begin{tikzpicture}[
+			node distance=1.8cm and 2.5cm,
+			v/.style={circle, draw, minimum size=8mm},
+			t/.style={rectangle, draw, minimum size=6mm},
+			>=stealth,
+			thick
+			]
+			
+			% Camada 1: Raiz
+			\node[v] (r) {$x$};
+			
+			% Camada 2: y aparece em ambos os ramos
+			\node[v] (yL) [below left=of r] {$y$};
+			\node[v] (yR) [below right=of r] {$y$};
+			
+			% Camada 3: O "problema" - x aparece DEPOIS de y no ramo da direita
+			\node[v] (x_down) [below=of yR] {$x$};
+			
+			% Camada 4: Terminais alinhados na base
+			% Posicionados de forma absoluta ou relativa ao nó mais baixo
+			\node[t] (t0) [below left=2cm and 1cm of yL] {0};
+			\node[t] (t1) [below right=2cm and 1cm of yR] {1};
+			
+			% --- Conexões Ramo Esquerdo (x=0 -> y) ---
+			\draw[->, dashed] (r) -- (yL);
+			\draw[->, dashed] (yL) -- (t0);
+			\draw[->] (yL) -- (t1);
+			
+			% --- Conexões Ramo Direito (x=1 -> y -> x) ---
+			\draw[->] (r) -- (yR);
+			
+			% y_right com y=0 vai para o x_down (violação de ordem!)
+			\draw[->, dashed] (yR) -- (x_down);
+			
+			% y_right com y=1 vai direto para o terminal 1
+			\draw[->] (yR) -- (t1.north west);
+			
+			% x_down (o x que aparece tarde demais)
+			\draw[->, dashed] (x_down) -- (t0);
+			\draw[->] (x_down) -- (t1);
+			
+		\end{tikzpicture}
+	\end{center}
+	
+	\textbf{Exemplo 2: BDD Ordenado mas não Reduzido}\\
+	Neste exemplo da função $f = x \lor y$, os nós terminais 0 e 1 são compartilhados.
+	\begin{center}
+		\begin{tikzpicture}[node distance=2cm, >=stealth, auto]
+			% Nós Internos
+			\node[circle,draw] (vx) {$x$};
+			\node[circle,draw, below left of=vx] (vy0) {$y$};
+			\node[circle,draw, below right of=vx] (vy1) {$y$};
+			
+			% Nós Terminais únicos
+			\node[rectangle,draw, below=3cm of vx] (t0) {0};
+			\node[rectangle,draw, right=1.5cm of t0] (t1) {1};
+			
+			% Arestas de X
+			\draw[->, dashed] (vx) -- (vy0);
+			\draw[->] (vx) -- (vy1);
+			
+			% Arestas de vy0 (Caminho onde x=0, então f depende de y)
+			\draw[->, dashed] (vy0) -- (t0);
+			\draw[->] (vy0) -- (t1);
+			
+			% Arestas de vy1 (Caminho onde x=1, então f é sempre 1)
+			% Note que vy1 é um nó redundante: ambos os caminhos levam a 1
+			\draw[->, dashed] (vy1) -- (t1);
+			\draw[->] (vy1) -- (t1);
+		\end{tikzpicture}
+	\end{center}
+	
+	\section{Ordered Binary Decision Diagram (OBDD)}
+	Um $\mathcal{P}$-OBDD é um BDD $\mathcal{B}$ que respeita um ordenamento de variáveis $(x_1,x_2,...,x_n)$ em que $x_i<x_{i+1}$ para qualquer valor de $i\in{\{1,...,n\}}$. A função de sucessores deve ser consistente com a relação de ordem, ou seja, se $succ(v_i) = v_j$, então, $var(v_i)<var(v_j)$. \\ 
+	
+	\textbf{Exemplo 1: BDD Ordenado (mas não Reduzido)}\\
+	Neste exemplo da função $f = x \lor y$. Os nós terminais 0 e 1 são compartilhados.
+	\begin{center}
+		\begin{tikzpicture}[node distance=2cm, >=stealth, auto]
+			% Nós Internos
+			\node[circle,draw] (vx) {$x$};
+			\node[circle,draw, below left of=vx] (vy0) {$y$};
+			\node[circle,draw, below right of=vx] (vy1) {$y$};
+			
+			% Nós Terminais únicos
+			\node[rectangle,draw, below=3cm of vx] (t0) {0};
+			\node[rectangle,draw, right=1.5cm of t0] (t1) {1};
+			
+			% Arestas de X
+			\draw[->, dashed] (vx) -- (vy0);
+			\draw[->] (vx) -- (vy1);
+			
+			% Arestas de vy0 (Caminho onde x=0, então f depende de y)
+			\draw[->, dashed] (vy0) -- (t0);
+			\draw[->] (vy0) -- (t1);
+			
+			% Arestas de vy1 (Caminho onde x=1, então f é sempre 1)
+			% Note que vy1 é um nó redundante: ambos os caminhos levam a 1
+			\draw[->, dashed] (vy1) -- (t1);
+			\draw[->] (vy1) -- (t1);
+		\end{tikzpicture}
+	\end{center}
+	
+	\section{Reduced Ordered Binary Decision Diagram (ROBDD)}
+	Um ROBDD é um $\mathcal{P}$-OBDD em que $\forall v,w\in V(v\neq w\to f_v \neq f_w)$. $f_v$ é a função induzida de um BDD tomando o nó $v$ como raiz. \\
+	
+	\subsection*{Exemplo: Função e BDD induzido}
+	Seja o BDD para $f = x \land y$. Cada nó $v$ induz uma função $f_v$ baseada em sua posição na estrutura:
+	
+	\begin{center}
+		\begin{tikzpicture}[node distance=1.5cm, v/.style={circle,draw,minimum size=8mm}, t/.style={rectangle,draw,minimum size=6mm}, >=stealth, thick]
+			\node[v] (vx) {$x$};
+			\node[v, below right=of vx] (vy) {$y$};
+			\node[t, below left=of vx] (t0) {0};
+			\node[t, below=of vy] (t1) {1};
+			
+			\draw[->, dashed] (vx) -- (t0);
+			\draw[->] (vx) -- (vy);
+			\draw[->, dashed] (vy) -- (t0);
+			\draw[->] (vy) -- (t1);
+			
+			% Notas explicativas
+			\node[right=0.5cm of vx, blue] {$f_{vx} = x \land y$};
+			\node[right=0.5cm of vy, blue] {$f_{vy} = y$};
+			\node[left=0.5cm of t0, blue] {$f_{t0} = 0$};
+		\end{tikzpicture}
+	\end{center}
+	Note que a função induzida pela raiz é a própria função alvo, enquanto o nó $y$ induz a função correspondente ao seu valor de verdade, já que $x$ foi avaliado como 1.
+	
+	\subsection*{Regras de redução:}
+	ROBDD é a forma canônica de um OBDD, ou seja, todo OBDD pode ser transformado num ROBDD por meio de uma transoformação. Dado um $\mathcal{B}=(V,V_I,V_T,succ_0,succ_1,var,val,v_0)$, as regras de redução são:
+	\begin{itemize}
+		\item \textbf{Regra de eliminação:} Se $v\in V_I$ com $succ_0(v)= succ_1(v)=w$, então, $v$ deve ser removido e, todo $u$, tal que $succ_1(u) = v$, será redirecionado para $w$,  $succ_1(u) = w$. O mesmo se aplica para o caso em que $succ_0(u)=v$.
+		\item \textbf{Regra de isomorfismo:} Se $v,w\in V$, $v\neq w$ e $v,w\in V_T$ atribuídos a um mesmo valor ($val(v)=val(w)$) ou $v,w\in V_I$ com $(var(v),succ_1(v),succ_0(v))=(var(w),succ_1(w),succ_0(w))$, então remove $v$ e redireciona os nós $u$ em que $succ_1(u) = v$ para $w$ ($succ_1(u) = w$). O mesmo se aplica para $succ_0(u)=v$.
+	\end{itemize}
+	
+	\subsection*{Exemplo: redução passo a passo}
+	Partimos de um OBDD para $f = x \lor y$ que contém um nó redundante e terminais duplicados.
+	
+	\textbf{Passo 1: Regra de Isomorfismo (Terminais)} \\
+	Agrupamos todos os nós terminais que possuem o mesmo valor. Haverá sempre um único nó terminal por valor.
+	
+	\begin{center}
+		\begin{tikzpicture}[
+			node distance=1.2cm and 1.5cm,
+			v/.style={circle, draw, minimum size=7mm, inner sep=0pt},
+			t/.style={rectangle, draw, minimum size=6mm},
+			>=stealth, thick, scale=0.9, every node/.style={transform shape}
+			]
+			
+			% --- LADO ESQUERDA: ÁRVORE COMPLETA ---
+			\node (labelTree) at (-2, 0.8) {\textbf{1. Árvore de Decisão}};
+			\node[v] (x1) at (-2,0) {$x$};
+			\node[v] (yL1) at (-3,-1.5) {$y$};
+			\node[v] (yR1) at (-1,-1.5) {$y$};
+			
+			% Terminais da Árvore (4 nós)
+			\node[t] (t0a) at (-3.7,-3) {0};
+			\node[t] (t1a) at (-2.7,-3) {1};
+			\node[t] (t1b) at (-1.3,-3) {1};
+			\node[t] (t1c) at (-0.3,-3) {1};
+			
+			\draw[->, dashed] (x1) -- (yL1); \draw[->] (x1) -- (yR1);
+			\draw[->, dashed] (yL1) -- (t0a); \draw[->] (yL1) -- (t1a);
+			\draw[->, dashed] (yR1) -- (t1b); \draw[->] (yR1) -- (t1c);
+			
+			% --- SETA DE TRANSIÇÃO ---
+			\draw[->, ultra thick] (0.5, -1.5) -- (2, -1.5) node[midway, above, align=center, scale=0.8] {Isomorfismo\\de Terminais};
+			
+			% --- LADO DIREITA: APÓS FUSÃO ---
+			\node (labelIso) at (4.5, 0.8) {\textbf{2. OBDD com Terminais Fundidos}};
+			\node[v] (x2) at (4.5,0) {$x$};
+			\node[v] (yL2) at (3.5,-1.5) {$y$};
+			\node[v] (yR2) at (5.5,-1.5) {$y$};
+			
+			% Terminais únicos (Isomorfismo aplicado)
+			\node[t] (T0) at (3.5,-3.5) {0};
+			\node[t] (T1) at (5.5,-3.5) {1};
+			
+			\draw[->, dashed] (x2) -- (yL2); \draw[->] (x2) -- (yR2);
+			
+			% y da esquerda aponta para 0 e 1
+			\draw[->, dashed] (yL2) -- (T0);
+			\draw[->] (yL2) -- (T1);
+			
+			% y da direita aponta apenas para o terminal 1 (mesmo ID)
+			\draw[->, dashed] (yR2) -- (T1);
+			\draw[->] (yR2) -- (T1);
+			
+		\end{tikzpicture}
+	\end{center}
+	
+	\textbf{Passo 2: Regra de Eliminação (Nós Redundantes)} \\
+	Identificamos o nó $y$ no ramo onde $x=1$. Como $succ_0(y) = succ_1(y) = 1$, o nó $y$ é redundante e deve ser removido, redirecionando o arco vindo de $x$ diretamente para o terminal $1$.
+	
+	\begin{center}
+		\begin{tikzpicture}[node distance=1.5cm, v/.style={circle,draw,minimum size=8mm}, t/.style={rectangle,draw,minimum size=6mm}, >=stealth, thick]
+			% Antes
+			\node (label1) at (0, 0.8) {\textbf{Antes}};
+			\node[v] (x1) at (0,0) {$x$};
+			\node[v] (yL1) at (-1,-1.5) {$y$};
+			\node[v] (yR1) at (1,-1.5) {$y$};
+			\node[t] (t01) at (-1.5,-3) {0};
+			\node[t] (t11) at (0.5,-3) {1};
+			
+			\draw[->, dashed] (x1) -- (yL1); \draw[->] (x1) -- (yR1);
+			\draw[->, dashed] (yL1) -- (t01); \draw[->] (yL1) -- (t11);
+			\draw[->, dashed] (yR1) -- (t11); \draw[->] (yR1) -- (t11);
+			
+			% Seta de transformação
+			\draw[->, ultra thick] (2, -1.5) -- (3.5, -1.5) node[midway, above] {Redução};
+			
+			% Depois (ROBDD)
+			\node (label2) at (5, 0.8) {\textbf{Depois (ROBDD)}};
+			\node[v] (x2) at (5,0) {$x$};
+			\node[v] (y2) at (4,-1.5) {$y$};
+			\node[t] (t02) at (4,-3) {0};
+			\node[t] (t12) at (6,-3) {1};
+			
+			\draw[->, dashed] (x2) -- (y2);
+			\draw[->] (x2) -- (t12); % Redirecionado e reduzido
+			\draw[->, dashed] (y2) -- (t02);
+			\draw[->] (y2) -- (t12);
+		\end{tikzpicture}
+	\end{center}
+	
+	\section{Shared Ordered Binary Decision Diagram (SOBDD)}
+	Cada função possui algum ROBDD para ser representada, porém, manter diversos ROBDDs pode ser custoso, pois há redundâncias e e duplicação de funções. Para evitar isto, há o SOBDDS, um OBDD com diversas raízes (um conjunto de raízes ao invés de um único $v_0$). Cada função é representada por uma raiz e as diferentes funções compartilham nós de funções isomórficas.
+	
+	\subsection*{Exemplo: Shared OBDD (SOBDD)}
+	Neste exemplo, as funções $f = x \land y$ e $g = z \lor (x \land y)$ são representadas simultaneamente. A subexpressão $(x \land y)$ é calculada e armazenada apenas uma vez, sendo compartilhada por ambas as raízes.
+	
+	\begin{center}
+		\begin{tikzpicture}[
+			node distance=1.5cm and 2cm,
+			v/.style={circle, draw, minimum size=8mm, thick},
+			t/.style={rectangle, draw, minimum size=6mm, thick},
+			root/.style={draw, stealth-, thick, red!70!black},
+			>=stealth,
+			thick
+			]
+			
+			% Nós da estrutura
+			\node[v] (z) {$z$};
+			\node[v] (x) [below left=of z, xshift=1cm] {$x$};
+			\node[v] (y) [below right=of x, xshift=-1cm] {$y$};
+			
+			% Terminais únicos
+			\node[t] (t0) [below left=1.5cm of y] {0};
+			\node[t] (t1) [below right=1.5cm of y] {1};
+			
+			% Definição das Raízes (Entry Points)
+			\draw[root] (z.north) -- ++(0,0.7) node[above] {Raiz de $g$};
+			\draw[root] (x.north west) -- ++(-0.5,0.5) node[left] {Raiz de $f$};
+			
+			% Arestas de Z (Função g)
+			\draw[->] (z) -- (t1) node[midway, right, scale=0.8] {1}; % Se z=1, g=1
+			\draw[->, dashed] (z) -- (x) node[midway, left, scale=0.8] {0}; % Se z=0, g depende de (x and y)
+			
+			% Arestas de X (Compartilhadas por f e g)
+			\draw[->] (x) -- (y) node[midway, right, scale=0.8] {1};
+			\draw[->, dashed] (x) -- (t0);
+			
+			% Arestas de Y (Compartilhadas)
+			\draw[->] (y) -- (t1);
+			\draw[->, dashed] (y) -- (t0);
+			
+		\end{tikzpicture}
+	\end{center}
+	
+	\chapter{Mapeamento de Modelos SSMV para BDDs}
+	Para converter um modelo SSMV para a representação simbólica, seguimos os seguintes passos:
+	
+	\section{Codificação de Variáveis}
+	Variáveis de domínios finitos são mapeadas para vetores de bits booleanos de acordo com o tamanho do domínio do tipo de dado. Seja $len(x)$ o domínio de uma variável do ssmv (inteiro, booliana ou enumeração). A quantidade de variáveis (boolianas do BDD) necessárias para representar cada variável do ssmv é igual a $\lceil \log_2(len(x))\rceil$. 
+	
+	\subsection*{Exemplo}
+	Caso $n: 0..7$, teremos $len(n) = 8$, assim $\lceil \log_2(len(n))\rceil = \lceil \log_2(8)\rceil = 3$, ou seja, precisaremos de 3 variáveis para representar a variável $n$ do ssmv.
+	
+	\section{Codificação de expressões boolianas}
+	Para cada expressão booliana em ssmv, basta compilar as subexpressões para um BDD e realizar a respectiva operação booliana. Seja $f_a$ a função representada pela compilação da expressão ssmv $a$ para um BDD.
+	\begin{itemize}
+		\item \textbf{a \& b}: $f_{\text{a\&b}} = f_a\land f_b$.
+		\item \textbf{a | b}: $f_{\text{a|b}} = f_a\lor f_b$.
+		\item \textbf{!a}: $f_{\text{!a}} = \neg f_a$.
+		\item \textbf{a->b}: $f_{\text{a->b}} = f_a\to f_b$.
+	\end{itemize}
+	
+	\section{Codificação de expressões relacionais}
+	Seja $n = len(a) = len(b)$, $x_i$ são as variáveis codificadas de \textbf{a} e  $y_i$ são as variáveis codificadas de \textbf{b}.
+	\begin{itemize}
+		\item \textbf{a = b}: $f_{\text{a=b}} =  \bigwedge_{i=1}^n (x_i \leftrightarrow y_i)$
+		\item \textbf{a > b}: $f_{\text{a>b}} = \bigvee_{i=1}^n \left( (x_i \land \neg y_i) \land \bigwedge_{j=i+1}^n (x_j \leftrightarrow y_j) \right)$
+		\item \textbf{a>=b}: $f_{\text{a>=b}} = f_{\text{a=b}}\lor f_{\text{a>b}} $
+		\item \textbf{a<=b}: $f_{\text{a<=b}} = \neg f_{\text{a>b}} $
+		\item \textbf{a<b}: $f_{\text{a<b}} = \neg f_{\text{a>=b}} $
+	\end{itemize}
+	
+	\section{Codificação de Operações Aritméticas}
+	A aritmética de vetores de bits é implementada simulando circuitos combinatórios através de operações lógicas em BDDs. 
+	
+	\subsection*{Adição (Ripple Carry Adder)}
+	A soma de dois vetores de bits $\textbf{a}$ e $\textbf{b}$ de tamanho $n$ é realizada bit a bit, propagando um bit de transporte (\textit{carry}). O bit de transporte inicial é definido como $c_0 = 0$. Para cada bit $i \in \{1, \dots, n\}$, o bit de soma $s_i$ e o próximo \textit{carry} $c_{i}$ são calculados como:
+	\begin{itemize}
+		\item $s_i = x_i \oplus y_i \oplus c_{i-1}$
+		\item $c_i = (x_i \land y_i) \lor ((x_i \oplus y_i) \land c_{i-1})$
+	\end{itemize}
+	
+	\subsection*{Subtração (Complemento de Dois)}
+	A subtração $\textbf{a} - \textbf{b}$ é convertida em uma operação de soma utilizando a representação de complemento de dois. Matematicamente, a operação é equivalente a $\textbf{a} + \neg \textbf{b} + 1$. 
+	\begin{itemize}
+		\item O \textit{carry}inicial é definido como $c_0 = 1$, representando o $+1$ da fórmula.
+		\item $sub_i = x_i \oplus \neg y_i \oplus c_{i-1}$.
+	\end{itemize}
+	
+	\section{Relações de atribuição}
+	\subsection*{Conjuntos}
+	Seja um conjunto $\{e_1,e_2,...,e_k\}$, $f_{x'}=e_i$ a função que atribui $e_i$ a variável futura $x'$.
+	\begin{equation}
+		f_{enum} = \bigvee_{i=1}^k f_{x'=e_i}
+	\end{equation}
+	
+	\subsection*{Condicionais}
+	A expressão \textbf{\textit{cond}} do ssmv é basciamente um \textit{if-then-else} encadeado, assim, pode ser representado pela operação $ITE(x,y,z)$ de BDDs.
+	\begin{equation}
+		f_{case} = ITE(c_1, f_{x'=r_1}, ITE(c_2, f_{x'=r_2}, \dots ITE(c_n, f_{x'=r_n}, \text{false}) \dots ))
+	\end{equation}
+	
+	\section{Relação de Transição (\texorpdfstring{$\Delta$}{Delta})}
+	A relação de transição é codificada como uma fórmula booliana relacionando variáveis do presente ($x$) e do futuro ($x'$).
+	\begin{equation}
+		\Delta(s, s') = \bigwedge_{x \in Var} \mathcal{R}_x(s, s')
+	\end{equation}
+	
+	Onde $Rv(s,s')$ é o BDD construído para a variável $x$, integrando as regras de:
+	\begin{itemize}
+		\item \textbf{Atribuição Simples:} $R_x=(x'\leftrightarrow f_x(s))$
+		\item \textbf{Conjuntos:} $R_x= \bigvee_{i=1}^k(x'\leftrightarrow e_i)$
+		\item \textbf{Condicionais (Case):} $R_v = ITE(c_1,R_{x1},ITE(c_2,R_{x2},…))$
+	\end{itemize}
+	
 	\chapter{Resultados Experimentais}
 	Os testes foram realizados comparando o SSMV com o NuSMV. Os resultados estão resumidos na Tabela \ref{tab:bench}.
 	
@@ -63,9 +515,8 @@
 	\end{table}
 	
 	\chapter{Conclusão}
-	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 	
-
 	\bibliographystyle{abntex2-alf}
 	\nocite{*}
 	\bibliography{references}
