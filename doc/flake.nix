@@ -26,7 +26,6 @@
             tex
             pkgs.texstudio
             pkgs.zotero
-            pkgs.hunspellDicts.pt-br
           ];
 
           shellHook = ''

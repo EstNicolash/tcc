@@ -71,28 +71,103 @@
 	\chapter{Fundamentação Teórica}
 	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 	
-	\begin{equation}
-		M, s \models EX \phi \iff \exists s' \in S \text{ tal que } (s, s') \in R \land M, s' \models \phi
-	\end{equation}
-	
+		
 	\section{Estruturas de Kripke}
-	Uma estrutura de Kripke (ou um sistema de transição) é uma tupla $(S, R, I,AP, L)$ onde:
-	\begin{itemize}
-		\item $S$ é um conjunto finito de \textbf{estados} (ou mundos possíveis).
-		\item $R \subseteq S \times S$ é uma \textbf{relação de acessibilidade} total (para cada $s \in S$, existe $s' \in S$ tal que $(s, s')\in R$).
-		\item $I \subseteq S$ é o conjunto de \textbf{estados iniciais}.
+	A semântica de mundos possíveis é o formalismo padrão para lógicas modais \cite{fittingFirstOrderModalLogic2023}. Um \textit{\textbf{frame}} é um par ordenado $(S, R)$ onde:   
+		\begin{itemize}
+		\item $S$ é um conjunto finito de \textbf{objetos} (mundos possíveis, estados, etc.).
+		\item $R \subseteq S \times S$ é uma \textbf{relação de acessibilidade}.
+	\end{itemize}
+	\par
+	Lê-se $(s,s')\in R$ como $s'$ é acessível pelo mundo $s$. Um \textit{frame} pode ser facilmente visualizado como um dígrafo. Um \textbf{modelo} $M$ é uma tupla $(F, AP, L)$ em que:
+		\begin{itemize}
+		\item $F$ é um \textit{frame}.
 		\item $AP$ é um conjunto finito de \textbf{proposições atômicas}.
-		\item $L: S \to 2^{AP}$ é uma \textbf{função de rotulação} que associa a cada estado o conjunto de proposições que nele são verdadeiras.
+		\item $L: S \to 2^{AP}$ é uma \textbf{função de rotulação} que associa a cada estado um conjunto de proposições que nele são verdadeiras ($M,s\models p\iff p\in L(s)$).
 	\end{itemize}
 	
-	\section{Switching Functions}
+	\par
+	No contexto de verificação de modelos, um sistema reativo é modelado para esta semântica, com o adicional do conjunto $I$ de \textbf{estados iniciais} tal que $I \subseteq S$ para capturar o equivalente de \textbf{sistemas de transição}. Em \cite{clarkeHandbookModelChecking2018} e \cite{clarkeModelChecking2018}, a tupla $(M,I)$ são chamadas de \textbf{estruturas de Kripke}. No caso da \textit{Computation Tree Logic} (CTL), há o adicional de a relação de acessibilidade $R$ necessita ser total, i.e.,  $\forall_s\exists_{s'}((s,s')\in R)$ onde $s,s'\in S$.
+	
+	\section{Computation Tree Logic (CTL)}
+	Seguindo a formalização de \cite{baierPrinciplesModelChecking2008a}.
+	
+	\subsection{Interpretação do tempo}
+	Uma lógica temporal necessita de uma interpretação específica. 
+	Uma interpretação possível é a de tempo linear em que o tempo é visto como uma sequência de acontecimentos únicos, possuindo sempre um possível resultado a cada ponto. 
+	Esta interpretação é usada na \textit{Linear Time Logic} (LTL).
+	Outra interpretação possível é ver o tempo como uma ramificação de todas possibilidades possíveis num determinado ponto. 
+	Esta visão permite uma noção de \textbf{caminhos}, os quais alguns podem satisfazer determinada propriedade ou não.
+	Dado uma estrutura de Kripke $(M,I)$, a \textbf{árvore de computação}, a estrutura que representa todas os caminhos possíveis, é obtida pelo \textit{unfolding} de $M$ tendo como raiz um estado de $I$ \cite{baierPrinciplesModelChecking2008a}. 
+	A lógica de árvore de computação (\textit{Computation Tree Logic}) trabalha com esta interpretação temporal.
+	
+	\subsection{Sintaxe}
+	
+	A gramática das fórmulas de CTL sobre um conjunto $AP$ de proposições atômicas é definida através do seguinte conjunto de operadores:
+	
+	\begin{equation}
+		\Phi ::= \top \mid a \mid \neg \Phi \mid \Phi_1 \land \Phi_2 \mid EX \Phi \mid E[\Phi_1 U \Phi_2] \mid EG \Phi
+	\end{equation}
+	
+	Onde $a \in AP$ representa uma proposição atômica. A partir deste conjunto, definimos os demais operadores como abreviações lógicas:
+	\begin{equation}
+		\begin{aligned}
+			AX \Phi &\equiv \neg EX \neg \Phi \\
+			EF \Phi &\equiv E[\top U \Phi] \\
+			AF \Phi &\equiv \neg EG \neg \Phi \\
+			AG \Phi &\equiv \neg EF \neg \Phi \\
+			A[\Phi_1 U \Phi_2] &\equiv \neg (E[\neg \Phi_2 U (\neg \Phi_1 \land \neg \Phi_2)] \lor EG \neg \Phi_2)
+		\end{aligned}
+	\end{equation}
+
+
+	\subsection{Semântica}
+	Seja $a$ um proposição atômica de $AP$, $\Phi$ uma formula CTL, um \textit{frame} $F = (S,R)$ e um modelos $M = (F, AP, L)$. Definimos um caminho como uma tupla infinita de estados $(s_0,s_1,s_2,...)$. A satisfação ($\models$) de um formula num estado $s_0\in S$ do modelo $M$ é definido da seguinte forma:
+	\begin{itemize}
+		\item $M, s_0 \models a \iff a \in L(s_0)$
+		\item $M, s_0 \models \neg \Phi \iff M, s_0 \not\models \Phi$
+		\item $M, s_0 \models \Phi_1 \land \Phi_2 \iff M, s_0 \models \Phi_1 \text{ e } M, s_0 \models \Phi_2$
+		\item $M, s_0 \models EX \Phi \iff \exists \pi = (s_0, s_1, \dots) \text{ tal que } M, s_1 \models \Phi$
+		\item $M, s_0 \models EG \Phi \iff \exists \pi = (s_0, s_1, \dots) \text{ tal que } \forall i \geq 0, M, s_i \models \Phi$
+		\item $M, s_0 \models E[\Phi_1 U \Phi_2] \iff \exists \pi = (s_0, s_1, \dots) \text{ tal que } \exists j \geq 0 \mid (M, s_j \models \Phi_2 \land \forall k < j, M, s_k \models \Phi_1)$
+	\end{itemize}
+	As abreviações (2.2) podem ser definidas independentemente, para melhor compreensão destas, da seguinte forma:
+	\begin{itemize}
+		\item  $M, s_0 \models AX \Phi \iff \forall \pi = (s_0, s_1, \dots) \mid M, s_1 \models \Phi$
+		\item  $M, s_0 \models EF \Phi \iff \exists \pi = (s_0, s_1, \dots), \exists i \ge 0 \mid M, s_i \models \Phi$
+		\item  $M, s_0 \models AF \Phi \iff \forall \pi = (s_0, s_1, \dots), \exists i \ge 0 \mid M, s_i \models \Phi$
+		\item  $M, s_0 \models AG \Phi \iff \forall \pi = (s_0, s_1, \dots) \mid \forall i \ge 0, M, s_i \models \Phi$
+		\item  $M, s_0 \models A[\Phi_1 U \Phi_2] \iff \forall \pi, \exists j \ge 0 \mid (M, s_j \models \Phi_2 \land \forall k < j, M, s_k \models \Phi_1)$
+	\end{itemize}
+	
+	\subsection*{Compreensão informal dos operadores temporais}
+	Cada operador temporal pode ser lido informalmente assim:
+	\begin{itemize}
+		\item \textbf{$EX\phi$:} $\Phi$ é satisfeita no próximo estado de algum caminho.
+		\item \textbf{$AX\phi$:} $\Phi$ é satisfeita no próximo estado de todos caminhos possíveis.
+		\item \textbf{$EG\phi$:} $\Phi$ é satisfeita no em todos estados de algum caminho.
+		\item \textbf{$AG\phi$:} $\Phi$ é satisfeita no em todos estados de todos caminho possíveis.
+		\item \textbf{$EF\phi$:} $\Phi$ é eventualmente satisfeita em algum estado de algum caminho.
+		\item \textbf{$AF\phi$:} $\Phi$ é eventualmente satisfeita em algum estado de todos caminhos possíveis.
+		\item \textbf{$E[\Phi_1 U \Phi_2]$:} $\Phi_1$ é satisfeita até que $\Phi_2$ é satisfeita em algum caminho.
+		\item \textbf{$A[\Phi_1 U \Phi_2]$:} $\Phi_1$ é satisfeita até que $\Phi_2$ é satisfeita em todos os caminhos possíveis.
+	\end{itemize}
+	
+	
+	\subsection{Propriedade de ponto fixo}
+	
+	\chapter{Algoritmo explicito}
+	
+	\chapter{Algoritmo simbólico}
+	
+	\section{\textit{Switching Functions}}
 	A verificação simbólica opera sobre conjuntos de estados representados por funções boolianas.
 	
 	\subsection*{Variáveis e avaliações:}
-	Seja um conjunto de variáveis boolianas $Var = \{x_1,x_2,x_3,...,x_n\}$. Uma \textbf{avaliação} (do conjunto) é uma atribuição de valores booleanos (0 ou 1) às variáveis (do conjunto), ou seja, uma avaliação é um função $\eta: Var\mapsto \{0,1\}$. $Eval(Var)$ é o conjunto de \textbf{todas as avaliações (do conjunto de variáveis)}.
+	Seja um conjunto de variáveis boolianas $Var = \{x_1,x_2,x_3,...,x_n\}$. Uma \textbf{avaliação} (do conjunto) é uma atribuição de valores boolianos (0 ou 1) às variáveis (do conjunto), ou seja, uma avaliação é um função $\eta: Var\mapsto \{0,1\}$. $Eval(Var)$ é o conjunto de \textbf{todas as avaliações (do conjunto de variáveis)}.
 	
-	\subsection*{Switching Functions}
-	Uma \textbf{switching function} é uma função $f: Eval(Var) \mapsto \{0,1\}$. No contexto de verificação, a \textbf{função característica} $\chi_T$ para representar um subconjunto de estados $T \subseteq S$:
+	\subsection*{\textit{Switching Functions}}
+	Uma \textbf{\textit{switching function}} é uma função $f: Eval(Var) \mapsto \{0,1\}$. No contexto de verificação, a \textbf{função característica} $\chi_T$ para representar um subconjunto de estados $T \subseteq S$:
 	\begin{equation}
 		\chi_T(s) = 1 \iff s \in T
 	\end{equation}
@@ -428,6 +503,10 @@
 		\end{tikzpicture}
 	\end{center}
 	
+	\chapter{Linguagem ssmv}
+	\section{Motivos da escolha pelo SMV}
+	\section{Sintaxe}	
+	\section{Semântica}
 	\chapter{Mapeamento de Modelos SSMV para BDDs}
 	Para converter um modelo SSMV para a representação simbólica, seguimos os seguintes passos:
 	
@@ -499,6 +578,13 @@
 		\item \textbf{Condicionais (Case):} $R_v = ITE(c_1,R_{x1},ITE(c_2,R_{x2},…))$
 	\end{itemize}
 	
+	\chapter{Metodologia e implementação}
+	\section{Ambiente de Desenvolvimento}
+	\section{Estruturas de Dados e Bibliotecas}
+	\section{Experimentos}
+	
+
+	
 	\chapter{Resultados Experimentais}
 	Os testes foram realizados comparando o SSMV com o NuSMV. Os resultados estão resumidos na Tabela \ref{tab:bench}.
 	
@@ -514,11 +600,11 @@
 		\end{tabular}
 	\end{table}
 	
+	
 	\chapter{Conclusão}
 	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 	
 	\bibliographystyle{abntex2-alf}
-	\nocite{*}
 	\bibliography{references}
 	
 \end{document}
