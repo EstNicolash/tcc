@@ -68,28 +68,6 @@ fn compile_transition_relation(model: &Model, symbolic_ctx: &mut SymbolicContext
         global_delta = global_delta.and(&var_transition).unwrap();
     }
 
-    for var_idx in 0..model.variables.len() {
-        if !has_next_assignment[var_idx] {
-            let (curr_bdds, next_bdds) = symbolic_ctx.manager.with_manager_shared(|m| {
-                let curr = symbolic_ctx.var_map[var_idx]
-                    .curr
-                    .iter()
-                    .map(|&id| BDDFunction::var(m, id).unwrap())
-                    .collect::<Vec<_>>();
-                let next = symbolic_ctx.var_map[var_idx]
-                    .next
-                    .iter()
-                    .map(|&id| BDDFunction::var(m, id).unwrap())
-                    .collect::<Vec<_>>();
-                (curr, next)
-            });
-
-            let frame_condition = bdd_number_eq(&curr_bdds, &next_bdds, &symbolic_ctx.manager);
-
-            global_delta = global_delta.and(&frame_condition).unwrap();
-        }
-    }
-
     symbolic_ctx.transition_relation = Some(global_delta);
 }
 

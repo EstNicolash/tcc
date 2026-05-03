@@ -182,13 +182,12 @@ fn compute_next_states(model: &Model, state: &[i32]) -> Vec<State> {
 
     let mut values_per_var = Vec::with_capacity(model.variables.len());
 
-    for (idx, _) in model.variables.iter().enumerate() {
+    for (idx, var) in model.variables.iter().enumerate() {
         if let Some(&expr_id) = next_map.get(&idx) {
             // With next: evaluate next expression
             values_per_var.push(eval(expr_id, state, model));
         } else {
-            // Without next: frame condition — variável mantém valor atual
-            values_per_var.push(vec![state[idx]]);
+            values_per_var.push(get_domain_values(&var.domain));
         }
     }
 
