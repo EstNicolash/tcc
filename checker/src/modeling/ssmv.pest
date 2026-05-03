@@ -25,8 +25,8 @@ ssmv_range_type  = { ssmv_signed_number ~ ".." ~ ssmv_signed_number }
 
 ssmv_define_decl = { ssmv_ident ~ ":=" ~ ssmv_expression }
 ssmv_assignment  = { ssmv_init_assign | ssmv_next_assign }
-ssmv_init_assign = { "init(" ~ ssmv_ident ~ ") :=" ~ ssmv_expression }
-ssmv_next_assign = { "next(" ~ ssmv_ident ~ ") :=" ~ ssmv_expression }
+ssmv_init_assign = { "init(" ~ ssmv_ident ~ ")" ~ ":=" ~ ssmv_expression }
+ssmv_next_assign = { "next(" ~ ssmv_ident ~ ")" ~ ":=" ~ ssmv_expression }
 
 ssmv_expression  = { ssmv_implication }
 ssmv_implication = { ssmv_logical_or  ~ ("->"          ~ ssmv_logical_or)* }
