@@ -112,74 +112,151 @@ fn purify_model_specs(model: &mut Model) {
     model.ctl_arena = core_arena;
     model.specs = core_specs;
 }
-
-struct TarjanContext {
+struct TarjanState {
     indices: Vec<Option<usize>>,
     lowlinks: Vec<usize>,
-    stack: Vec<StateID>,
     on_stack: Vec<bool>,
+    tarjan_stk: Vec<StateID>,
     next_index: usize,
     sccs: Vec<Vec<StateID>>,
 }
 
-fn strong_connect(
+impl TarjanState {
+    fn new(num_states: usize) -> Self {
+        Self {
+            indices: vec![None; num_states],
+            lowlinks: vec![0; num_states],
+            on_stack: vec![false; num_states],
+            tarjan_stk: Vec::with_capacity(num_states),
+            next_index: 0,
+            sccs: Vec::new(),
+        }
+    }
+
+    fn discover(&mut self, u: StateID) {
+        let idx = u.0 as usize;
+        self.indices[idx] = Some(self.next_index);
+        self.lowlinks[idx] = self.next_index;
+        self.next_index += 1;
+        self.tarjan_stk.push(u);
+        self.on_stack[idx] = true;
+    }
+
+    fn try_emit_scc(&mut self, u: StateID) {
+        let u_idx = u.0 as usize;
+        if self.lowlinks[u_idx] != self.indices[u_idx].unwrap() {
+            return;
+        }
+        let mut scc = Vec::new();
+        loop {
+            let v = self.tarjan_stk.pop().unwrap();
+            self.on_stack[v.0 as usize] = false;
+            scc.push(v);
+            if v == u {
+                break;
+            }
+        }
+        self.sccs.push(scc);
+    }
+}
+
+fn strong_connect_rec(
     structure: &KripkeStructure,
     f_sat: &FixedBitSet,
     u: StateID,
-    ctx: &mut TarjanContext,
+    ctx: &mut TarjanState,
 ) {
-    let u_vec_idx = u.0 as usize;
-    ctx.indices[u_vec_idx] = Some(ctx.next_index);
-    ctx.lowlinks[u_vec_idx] = ctx.next_index;
-    ctx.stack.push(u);
-    ctx.on_stack[u_vec_idx] = true;
-    ctx.next_index += 1;
+    ctx.discover(u);
+    let u_idx = u.0 as usize;
 
     for &v in structure.get_successors(u) {
         if !f_sat.contains(v.0 as usize) {
             continue;
         }
-        let v_vec_idx = v.0 as usize;
-        if ctx.indices[v_vec_idx].is_none() {
-            strong_connect(structure, f_sat, v, ctx);
-            ctx.lowlinks[u_vec_idx] = ctx.lowlinks[u_vec_idx].min(ctx.lowlinks[v_vec_idx]);
-        } else if ctx.on_stack[v_vec_idx] {
-            ctx.lowlinks[u_vec_idx] = ctx.lowlinks[u_vec_idx].min(ctx.indices[v_vec_idx].unwrap());
+        let v_idx = v.0 as usize;
+
+        if ctx.indices[v_idx].is_none() {
+            strong_connect_rec(structure, f_sat, v, ctx);
+            ctx.lowlinks[u_idx] = ctx.lowlinks[u_idx].min(ctx.lowlinks[v_idx]);
+        } else if ctx.on_stack[v_idx] {
+            ctx.lowlinks[u_idx] = ctx.lowlinks[u_idx].min(ctx.indices[v_idx].unwrap());
         }
     }
 
-    if ctx.lowlinks[u_vec_idx] == ctx.indices[u_vec_idx].unwrap() {
-        let mut scc = Vec::new();
-        loop {
-            let v = ctx.stack.pop().unwrap();
-            let v_vec_idx = v.0 as usize;
-            scc.push(v);
-            ctx.on_stack[v_vec_idx] = false;
-            if v == u {
-                break;
-            }
-        }
-        ctx.sccs.push(scc);
-    }
+    ctx.try_emit_scc(u);
 }
 
-pub fn tarjan_scc(structure: &KripkeStructure, f_sat: &FixedBitSet) -> Vec<Vec<StateID>> {
-    let mut ctx = TarjanContext {
-        indices: vec![None; structure.num_states()],
-        lowlinks: vec![0; structure.num_states()],
-        stack: Vec::with_capacity(structure.num_states()),
-        on_stack: vec![false; structure.num_states()],
-        next_index: 0,
-        sccs: Vec::new(),
-    };
+pub fn tarjan_scc_recursive(structure: &KripkeStructure, f_sat: &FixedBitSet) -> Vec<Vec<StateID>> {
+    let mut ctx = TarjanState::new(structure.num_states());
 
     for s in f_sat.ones() {
         if ctx.indices[s].is_none() {
-            strong_connect(structure, f_sat, StateID(s as u32), &mut ctx);
+            strong_connect_rec(structure, f_sat, StateID(s as u32), &mut ctx);
+        }
+    }
+    ctx.sccs
+}
+
+pub fn tarjan_scc_iterative(structure: &KripkeStructure, f_sat: &FixedBitSet) -> Vec<Vec<StateID>> {
+    let mut ctx = TarjanState::new(structure.num_states());
+
+    let mut work_stack: Vec<(StateID, usize)> = Vec::new();
+
+    for start in f_sat.ones() {
+        if ctx.indices[start].is_some() {
+            continue;
+        }
+
+        let start_id = StateID(start as u32);
+        ctx.discover(start_id);
+        work_stack.push((start_id, 0));
+
+        while !work_stack.is_empty() {
+            let &(u, succ_idx) = work_stack.last().unwrap();
+            let u_idx = u.0 as usize;
+            let successors = structure.get_successors(u);
+
+            let mut next_succ_ptr = succ_idx;
+            let mut pushed_child = false;
+
+            while next_succ_ptr < successors.len() {
+                let v = successors[next_succ_ptr];
+                next_succ_ptr += 1;
+
+                if !f_sat.contains(v.0 as usize) {
+                    continue;
+                }
+                let v_idx = v.0 as usize;
+
+                if ctx.indices[v_idx].is_none() {
+                    work_stack.last_mut().unwrap().1 = next_succ_ptr;
+                    ctx.discover(v);
+                    work_stack.push((v, 0));
+                    pushed_child = true;
+                    break;
+                } else if ctx.on_stack[v_idx] {
+                    ctx.lowlinks[u_idx] = ctx.lowlinks[u_idx].min(ctx.indices[v_idx].unwrap());
+                }
+            }
+
+            if !pushed_child {
+                work_stack.pop();
+
+                if let Some(&(parent, _)) = work_stack.last() {
+                    let p_idx = parent.0 as usize;
+                    ctx.lowlinks[p_idx] = ctx.lowlinks[p_idx].min(ctx.lowlinks[u_idx]);
+                }
+
+                ctx.try_emit_scc(u);
+            }
         }
     }
 
     ctx.sccs
+}
+
+pub fn tarjan_scc(structure: &KripkeStructure, f_sat: &FixedBitSet) -> Vec<Vec<StateID>> {
+    tarjan_scc_iterative(structure, f_sat)
 }
 
 /// Labels the states in the Kripke structure according to the given CTL formula.
@@ -465,7 +542,22 @@ pub fn verify(structure: &KripkeStructure, mut model: Model) -> Vec<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::kripke_structure::KripkeBuilder;
     use std::collections::HashMap;
+
+    fn normalize(mut sccs: Vec<Vec<StateID>>) -> Vec<Vec<StateID>> {
+        for scc in &mut sccs {
+            scc.sort_by_key(|s| s.0);
+        }
+        sccs.sort_by_key(|scc| scc[0].0);
+        sccs
+    }
+
+    fn full_bitset(n: usize) -> FixedBitSet {
+        let mut bs = FixedBitSet::with_capacity(n);
+        bs.insert_range(0..n);
+        bs
+    }
 
     #[test]
     fn test_af_conversion_to_core_scc() {
@@ -555,5 +647,91 @@ mod tests {
         } else {
             panic!("EG should be preserved as a core operator");
         }
+    }
+
+    #[test]
+    fn test_single_scc_cycle() {
+        let mut b = KripkeBuilder::new(1);
+        let s0 = b.states.get_or_insert(&[0]);
+        let s1 = b.states.get_or_insert(&[1]);
+        let s2 = b.states.get_or_insert(&[2]);
+        b.add_initial_state(s0);
+        b.add_transition(s0, s1);
+        b.add_transition(s1, s2);
+        b.add_transition(s2, s0);
+        let ks = KripkeStructure::from_builder(b);
+        let f = full_bitset(3);
+
+        let rec = normalize(tarjan_scc_recursive(&ks, &f));
+        let iter = normalize(tarjan_scc_iterative(&ks, &f));
+
+        assert_eq!(rec, iter, "iterativo divergiu do recursivo");
+        assert_eq!(iter.len(), 1, "deveria ter 1 SCC");
+        assert_eq!(iter[0].len(), 3, "SCC deveria ter 3 estados");
+    }
+
+    #[test]
+    fn test_dag_trivial_sccs() {
+        let mut b = KripkeBuilder::new(1);
+        let s0 = b.states.get_or_insert(&[0]);
+        let s1 = b.states.get_or_insert(&[1]);
+        let s2 = b.states.get_or_insert(&[2]);
+        b.add_initial_state(s0);
+        b.add_transition(s0, s1);
+        b.add_transition(s1, s2);
+        let ks = KripkeStructure::from_builder(b);
+        let f = full_bitset(3);
+
+        let rec = normalize(tarjan_scc_recursive(&ks, &f));
+        let iter = normalize(tarjan_scc_iterative(&ks, &f));
+
+        assert_eq!(rec, iter);
+        assert_eq!(iter.len(), 3, "DAG deve ter 3 SCCs triviais");
+    }
+
+    #[test]
+    fn test_filtered_f_sat() {
+        let mut b = KripkeBuilder::new(1);
+        let s0 = b.states.get_or_insert(&[0]);
+        let s1 = b.states.get_or_insert(&[1]);
+        let s2 = b.states.get_or_insert(&[2]);
+        b.add_initial_state(s0);
+        b.add_transition(s0, s1);
+        b.add_transition(s1, s2);
+        b.add_transition(s2, s0);
+        let ks = KripkeStructure::from_builder(b);
+
+        let mut f = FixedBitSet::with_capacity(3);
+        f.insert(0);
+        f.insert(2);
+
+        let rec = normalize(tarjan_scc_recursive(&ks, &f));
+        let iter = normalize(tarjan_scc_iterative(&ks, &f));
+
+        assert_eq!(rec, iter);
+        assert_eq!(iter.len(), 2);
+    }
+
+    #[test]
+    fn test_two_separate_sccs() {
+        let mut b = KripkeBuilder::new(1);
+        let s0 = b.states.get_or_insert(&[0]);
+        let s1 = b.states.get_or_insert(&[1]);
+        let s2 = b.states.get_or_insert(&[2]);
+        let s3 = b.states.get_or_insert(&[3]);
+        b.add_initial_state(s0);
+        b.add_transition(s0, s1);
+        b.add_transition(s1, s0);
+        b.add_transition(s1, s2);
+        b.add_transition(s2, s3);
+        b.add_transition(s3, s2);
+        let ks = KripkeStructure::from_builder(b);
+        let f = full_bitset(4);
+
+        let rec = normalize(tarjan_scc_recursive(&ks, &f));
+        let iter = normalize(tarjan_scc_iterative(&ks, &f));
+
+        assert_eq!(rec, iter);
+        assert_eq!(iter.len(), 2);
     }
 }
