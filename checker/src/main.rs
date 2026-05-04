@@ -63,7 +63,7 @@ fn main() {
 
 fn run_verification(
     model_path: String,
-    _spec_path: String,
+    _spec_path: Option<String>,
     format: InputFormat,
     algorithm: Algorithm,
 ) {

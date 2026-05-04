@@ -10,18 +10,26 @@ EXAMPLES_DIR = PROJECT_ROOT / "examples"
 CHECKER_BIN = PROJECT_ROOT / "target" / "release" / "checker"
 BENCHMARK_DIR = PROJECT_ROOT / "benchmark"
 
+TIMEOUT_LIMIT = 60
+
 INSTANCES = [
-    "chest.smv",
+    "dining_8.smv",
+    "dining_10.smv",
+    "dining_12.smv",
+    "dining_14.smv",
 ]
 
-CHECKER_ALGORITHMS = ["bdd", "labelling"]
+CHECKER_ALGORITHMS = ["bdd", "labelling-scc"]
 
 NUSMV_TEMPLATE = """
 set default_trace_plugin 0
+set cone_of_influence
+set bdd_static_order_heuristics none
+set vars_order_type topological
 read_model -i {model_path}
 flatten_hierarchy
 encode_variables
-build_model
+build_model -m Monolithic
 echo "[MILESTONE 1]"
 print_usage
 check_ctlspec
@@ -73,42 +81,55 @@ def run_benchmarks():
         print(f"\n>>> Processing Model: {model_name}")
 
         for algo in CHECKER_ALGORITHMS:
-            print(f"    Running SSMV-Checker with algorithm: {algo}...")
-            temp_csv = PROJECT_ROOT / "benchmarks.csv"
-            if temp_csv.exists(): os.remove(temp_csv)
+            try:
+                print(f"    Running SSMV-Checker with algorithm: {algo}...")
+                temp_csv = PROJECT_ROOT / "benchmarks.csv"
+                if temp_csv.exists(): os.remove(temp_csv)
 
-            cmd_checker = ["time", "-v", str(CHECKER_BIN), "verify", str(smv_file), str(smv_file), "--format", "ssmv", "--algorithm", algo]
-            proc_c = subprocess.run(cmd_checker, capture_output=True, text=True)
+                cmd_checker = ["time", "-v", str(CHECKER_BIN), "verify", str(smv_file), "--algorithm", algo]
 
-            peak_c = get_peak_mem(proc_c.stderr)
+                proc_c = subprocess.run(cmd_checker, capture_output=True, text=True, timeout=TIMEOUT_LIMIT)
 
-            if temp_csv.exists():
-                with open(temp_csv, 'r') as f:
-                    row = list(csv.DictReader(f))[-1]
-                    algo_label = f"SSMV-{algo.capitalize()}"
-                    all_data.append([
-                        model_name, algo_label, row['total_ms'], row['compile_ms'],
-                        row['verify_ms'], row['static_nodes'], row['verification_nodes'], peak_c, row.get('states', 0)
-                    ])
+                peak_c = get_peak_mem(proc_c.stderr)
+
+                if proc_c.returncode == 0 and temp_csv.exists():
+                    with open(temp_csv, 'r') as f:
+                        row = list(csv.DictReader(f))[-1]
+                        all_data.append([
+                            model_name, f"SSMV-{algo.capitalize()}", row['total_ms'], row['compile_ms'],
+                            row['verify_ms'], row['static_nodes'], row['verification_nodes'], peak_c, row.get('states', 0)
+                        ])
+                else:
+                    all_data.append([model_name, f"SSMV-{algo.capitalize()}", "ERROR/OOM", "-", "-", "-", "-", peak_c, "-"])
+
+            except subprocess.TimeoutExpired:
+                print(f"    TIMEOUT: {algo} excedeu {TIMEOUT_LIMIT}s")
+                all_data.append([model_name, f"SSMV-{algo.capitalize()}", "TIMEOUT", "-", "-", "-", "-", "-", "-"])
+
+        try:
+            print(f"    Running NuSMV benchmark...")
+            nusmv_script = results_path / f"bench_{model_name}.nusmv"
+            with open(nusmv_script, 'w') as f:
+                f.write(NUSMV_TEMPLATE.format(model_path=str(smv_file)))
+
+            cmd_nusmv = ["time", "-v", "NuSMV", "-dcx", "-source", str(nusmv_script)]
+
+            proc_n = subprocess.run(cmd_nusmv, capture_output=True, text=True, timeout=TIMEOUT_LIMIT)
+
+            peak_n = get_peak_mem(proc_n.stderr)
+            stats_n = parse_nusmv_output(proc_n.stdout)
+
+            if stats_n:
+                all_data.append([
+                    model_name, "NuSMV", stats_n['total_ms'], stats_n['compile_ms'],
+                    stats_n['verify_ms'], stats_n['static_nodes'], stats_n['verification_nodes'], peak_n, 0
+                ])
             else:
-                print(f"    ERROR: Checker failed to generate benchmarks.csv for {algo}.")
+                all_data.append([model_name, "NuSMV", "ERROR/OOM", "-", "-", "-", "-", peak_n, "-"])
 
-        print(f"    Running NuSMV benchmark...")
-        nusmv_script = results_path / f"bench_{model_name}.nusmv"
-        with open(nusmv_script, 'w') as f:
-            f.write(NUSMV_TEMPLATE.format(model_path=str(smv_file)))
-
-        cmd_nusmv = ["time", "-v", "NuSMV", "-dcx", "-source", str(nusmv_script)]
-        proc_n = subprocess.run(cmd_nusmv, capture_output=True, text=True)
-
-        peak_n = get_peak_mem(proc_n.stderr)
-        stats_n = parse_nusmv_output(proc_n.stdout)
-
-        if stats_n:
-            all_data.append([
-                model_name, "NuSMV", stats_n['total_ms'], stats_n['compile_ms'],
-                stats_n['verify_ms'], stats_n['static_nodes'], stats_n['verification_nodes'], peak_n, 0
-            ])
+        except subprocess.TimeoutExpired:
+            print(f"    TIMEOUT: NuSMV excedeu {TIMEOUT_LIMIT}s")
+            all_data.append([model_name, "NuSMV", "TIMEOUT", "-", "-", "-", "-", "-", "-"])
 
     with open(csv_final_path, 'w', newline='') as f:
         writer = csv.writer(f)
