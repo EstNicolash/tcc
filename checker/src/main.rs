@@ -5,6 +5,7 @@ mod io;
 mod modeling;
 mod specs;
 
+use crate::io::read_order_file::read_order_file;
 use clap::Parser;
 use cli::{Algorithm, Cli, Commands, InputFormat};
 use colored::*;
@@ -50,10 +51,11 @@ fn main() {
         Commands::Verify {
             model_path,
             spec_path,
+            order,
             format,
             algorithm,
         } => {
-            run_verification(model_path, spec_path, format, algorithm);
+            run_verification(model_path, spec_path, order, format, algorithm);
         }
         Commands::TestParser { input_file, output } => {
             run_parser_test(input_file, output);
@@ -64,6 +66,7 @@ fn main() {
 fn run_verification(
     model_path: String,
     _spec_path: Option<String>,
+    order_path: Option<String>,
     format: InputFormat,
     algorithm: Algorithm,
 ) {
@@ -128,8 +131,14 @@ fn run_verification(
         Algorithm::Bdd => {
             println!("{} Using Symbolic BDD algorithm (OxiDD)...", "ℹ".blue());
 
+            let explicit_order = order_path.map(|path| read_order_file(&path));
+            if explicit_order.is_some() {
+                println!("{} Loaded custom variable ordering.", "✔".green());
+            }
+
             let compile_start = Instant::now();
-            let symbolic_ctx = modeling::bdd_compiler::compile_model_to_bdd(&symbolic_model);
+            let symbolic_ctx =
+                modeling::bdd_compiler::compile_model_to_bdd(&symbolic_model, explicit_order);
 
             // Collect BDD node count from OxiDD Manager
             record.static_nodes = symbolic_ctx
@@ -231,6 +240,7 @@ fn save_to_csv(r: BenchmarkRecord) {
 
     println!("{} Results appended to {}", "✔".green(), file_name);
 }
+
 fn run_parser_test(input_file: String, output: Option<String>) {
     println!("{}", "--- Mode: SSMV Parser Test ---".yellow().bold());
 

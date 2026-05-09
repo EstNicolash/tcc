@@ -20,6 +20,9 @@ pub enum Commands {
         /// Path to the specification file (.spec)
         spec_path: Option<String>,
 
+        #[arg(short, long)]
+        order: Option<String>,
+
         /// Format of the model input
         #[arg(short, long, value_enum, default_value_t = InputFormat::Ssmv)]
         format: InputFormat,

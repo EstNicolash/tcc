@@ -7,9 +7,9 @@ use crate::modeling::symbolic::{BinaryOp, Model, SymbolicExpr, SymbolicExprID, U
 use oxidd::bdd::BDDFunction;
 use oxidd::{BooleanFunction, ManagerRef};
 
-pub fn compile_model_to_bdd(model: &Model) -> SymbolicContext {
+pub fn compile_model_to_bdd(model: &Model, explicit_order: Option<Vec<String>>) -> SymbolicContext {
     // Create the symbolic context and allocate variables
-    let mut symbolic_ctx = SymbolicContext::new(model);
+    let mut symbolic_ctx = SymbolicContext::new(model, explicit_order);
 
     // Compile the initial states
     compile_initial_states(model, &mut symbolic_ctx);

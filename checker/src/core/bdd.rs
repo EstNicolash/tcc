@@ -37,17 +37,88 @@ pub struct VarBits {
     pub next: Vec<u32>,
 }
 
+fn resolve_bit_name(name: &str, model: &Model) -> Option<(usize, usize)> {
+    if name.contains('.') {
+        let parts: Vec<&str> = name.split('.').collect();
+        let var_name = parts[0];
+        let bit_idx = parts[1].parse::<usize>().ok()?;
+
+        let var_idx = model
+            .variables
+            .iter()
+            .position(|v| model.ast_names.get_ident(v._name) == var_name)?;
+
+        Some((var_idx, bit_idx))
+    } else {
+        let var_idx = model
+            .variables
+            .iter()
+            .position(|v| model.ast_names.get_ident(v._name) == name)?;
+
+        Some((var_idx, 0))
+    }
+}
+
 impl SymbolicContext {
     /// Creates a new symbolic context from the given model.
     ///
     /// Initializes the BDD manager and builds the variable map.
     /// The variables are ordered by their index in the model.
     /// Each model variable is mapped to two BDD variable, one for the current state and one for the next state.
-    pub fn new(model: &Model) -> Self {
-        let manager = oxidd::bdd::new_manager(2_000_000, 1_000_000, 1);
+    pub fn new(model: &Model, explicit_order: Option<Vec<String>>) -> Self {
+        let manager = oxidd::bdd::new_manager(40_000_000, 1_000_000, 1);
 
-        let mut var_map = Vec::with_capacity(model.variables.len());
+        let mut var_map: Vec<VarBits> = (0..model.variables.len())
+            .map(|_| VarBits {
+                curr: vec![],
+                next: vec![],
+            })
+            .collect();
 
+        manager.with_manager_exclusive(|m| {
+            // 1. Pre-allocate VarBits vectors with the correct size using a sentinel value
+            for (var_idx, var) in model.variables.iter().enumerate() {
+                let bit_count = match &var.domain {
+                    Domain::Boolean => 1,
+                    Domain::Enum(ids) => calc_bits(ids.len()),
+                    Domain::Range { min, max } => calc_bits((max - min + 1) as usize),
+                };
+
+                // Initialize with u32::MAX to track which bits are still unassigned
+                var_map[var_idx].curr.resize(bit_count, u32::MAX);
+                var_map[var_idx].next.resize(bit_count, u32::MAX);
+            }
+
+            // 2. Process the explicit variable order by injecting bits into exact indices
+            if let Some(order) = explicit_order {
+                for bit_name in order {
+                    if let Some((var_idx, bit_idx)) = resolve_bit_name(&bit_name, model) {
+                        // Safety check: ensure the bit index is within the variable's domain range
+                        if bit_idx < var_map[var_idx].curr.len() {
+                            // Only allocate BDD levels if this bit has not been defined yet
+                            if var_map[var_idx].curr[bit_idx] == u32::MAX {
+                                let range = m.add_vars(2);
+                                var_map[var_idx].curr[bit_idx] = range.start;
+                                var_map[var_idx].next[bit_idx] = range.start + 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Fallback: Allocate BDD variables for any bits missed by the oracle or order file
+            for var_idx in 0..var_map.len() {
+                for bit_idx in 0..var_map[var_idx].curr.len() {
+                    if var_map[var_idx].curr[bit_idx] == u32::MAX {
+                        let range = m.add_vars(2);
+                        var_map[var_idx].curr[bit_idx] = range.start;
+                        var_map[var_idx].next[bit_idx] = range.start + 1;
+                    }
+                }
+            }
+        });
+
+        /*
         manager.with_manager_exclusive(|m| {
             for var in &model.variables {
                 let bit_count = match &var.domain {
@@ -70,7 +141,7 @@ impl SymbolicContext {
                     next: next_bits,
                 });
             }
-        });
+        });*/
 
         let mut curr_ids = Vec::new();
         let mut next_bdds = Vec::new();
