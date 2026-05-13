@@ -35,12 +35,12 @@
 \newcommand{\eg}{\text{EG}}
 
 \title{Lorem Ipsum}
-\translatedtitle{Development of a Symbolic Model Checker in Rust}
+\translatedtitle{Lorem}
 
 \author{Ipsum}{Lorem} 
 \advisor[Prof.~Dr.]{Lorem}{Ipsum} 
 
-\date{Abril}{2026}
+\date{Maio}{2026}
 
 \keyword{Verificação Formal}
 \keyword{BDDs}
@@ -66,10 +66,29 @@
 	\listoftables
 	
 	\chapter{Introdução}
-	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+	\section{Motivação}
+	
+	Um sistema reativo é um programa cujo comportamento não é a mera computação de um função, i.e., um programa que meramente recebe um \textit{input} e retorna um \textit{output}, encerrando-se num estado de terminação. Um sistema reativo, na verdade, é um programa que está em constate execução e sempre interagindo com o seu ambiente. Neste sentido, podemos dizer que um sistema reativo está num ciclo infinito de respostas. Exemplos típicos deste tipo de sistema são: protocolos de comunicação, sistemas embarcados, sistemas operacionais, etc. 
+	
+	Muitos destes sistemas se enquadram como de missão crítica, ou seja, uma falha de \textit{software} pode causar danos graves, seja para a vida de pessoas, como em programas médicos, ou para a economia \cite{?}. Apesar das dificuldades que o desenvolvimento destes sistemas podem ter, grande parte deles possui um domínio finito de estados, o que permite uma busca exaustiva em todos os estado os estados alcançáveis pelo sistema. Desta forma, é possível verificar com precisão matemática se um sistema possui uma determinada propriedade \cite{?}. Na literatura, esta abordagem exaustiva no espaço de estados se chama \textbf{verificação de modelos} (\textit{model checking}).
+	
+	Desde a sua gênese, a área de verificação de modelos vem ganhando cada vez mais espaço em aplicações reais. O maior sucesso da área está no contexto de \textit{hardware}, com ferramentas de verificação sendo essenciais em programas de síntese de circuitos digitais \cite{?}. Ao contrário do caso do \textit{hardware}, há uma recepção menor para \textit{softwares}, principalmente em aplicações já desenvolvidas. Contudo, isto é razão para o progresso da verificação de modelos. Ademais, segundo \citeonline{clarkeIntroductionModelChecking2018}, há três fatos que garantirão o progresso e o sucesso da área, sendo eles: a onipresença de hardwares e softwares só aumenta, evoluindo ainda mais a complexidade da comunicação e se tornando ainda mais presente em missões críticas; há uma mudança na avaliação de qualidade computacional para além do desempenho e do número de funcionalidades, há uma crescente valorização da correção, confiabilidade, segurança e robustez; por fim, os sistemas de transição estados pode ser usado universalmente como ferramenta em outras áreas, como na produção, design, biologia, etc.
+	
+	
+	
+	\section{Objetivos}
+	
+	\section{Metodologia}
+	\subsection{Implementação}
+	\subsection{Instâncias de teste}
+	\subsection{Ambiente de Desenvolvimento}
+	\subsection{Uso de Inteligência Artificial Generativa}
+	
+	
+	
 	
 	\chapter{Fundamentação Teórica}
-	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+	\section{Descrição de sistemas e descrição de propriedades}
 	
 		
 	\section{Estruturas de Kripke}
@@ -156,9 +175,19 @@
 	
 	\subsection{Propriedade de ponto fixo}
 	
-	\chapter{Algoritmo explicito}
+	\chapter{Linguagem ssmv}
+	\section{Motivos da escolha pelo SMV}
+	\section{Sintaxe}	
+	\section{Semântica}
 	
-	\chapter{Algoritmo simbólico}
+	\chapter{Verificação de modelos explícita}
+	\section{O problema da explosão de estados}
+	\section{Algoritmo de rotulação (labelling)}
+	\section{Notas Implementação}
+	\section{Resultados e Avaliação}
+	
+	
+	\chapter{Binary Decision Diagrams}
 	
 	\section{\textit{Switching Functions}}
 	A verificação simbólica opera sobre conjuntos de estados representados por funções boolianas.
@@ -503,12 +532,10 @@
 		\end{tikzpicture}
 	\end{center}
 	
-	\chapter{Linguagem ssmv}
-	\section{Motivos da escolha pelo SMV}
-	\section{Sintaxe}	
-	\section{Semântica}
+	
 	\chapter{Mapeamento de Modelos SSMV para BDDs}
 	Para converter um modelo SSMV para a representação simbólica, seguimos os seguintes passos:
+	
 	
 	\section{Codificação de Variáveis}
 	Variáveis de domínios finitos são mapeadas para vetores de bits booleanos de acordo com o tamanho do domínio do tipo de dado. Seja $len(x)$ o domínio de uma variável do ssmv (inteiro, booliana ou enumeração). A quantidade de variáveis (boolianas do BDD) necessárias para representar cada variável do ssmv é igual a $\lceil \log_2(len(x))\rceil$. 
@@ -578,14 +605,10 @@
 		\item \textbf{Condicionais (Case):} $R_v = ITE(c_1,R_{x1},ITE(c_2,R_{x2},…))$
 	\end{itemize}
 	
-	\chapter{Metodologia e implementação}
-	\section{Ambiente de Desenvolvimento}
-	\section{Estruturas de Dados e Bibliotecas}
-	\section{Experimentos}
-	
-
-	
-	\chapter{Resultados Experimentais}
+	\chapter{Verificação de modelos simbólica}
+	\section{Algortimo de derificação simbólica}
+	\subsection{Notas de implementação}
+	\subsection{Resultados e Avaliação}
 	Os testes foram realizados comparando o SSMV com o NuSMV. Os resultados estão resumidos na Tabela \ref{tab:bench}.
 	
 	\begin{table}[ht]
@@ -600,6 +623,14 @@
 		\end{tabular}
 	\end{table}
 	
+	\section{Verificação simbólica com reordenamento de variáveis estático}
+	\subsection{Notas de implementação}
+	\subsection{Resultados e Avaliação}
+	
+	
+
+	
+
 	
 	\chapter{Conclusão}
 	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
