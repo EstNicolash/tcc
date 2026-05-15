@@ -70,19 +70,49 @@
 	
 	Um sistema reativo é um programa cujo comportamento não é a mera computação de um função, i.e., um programa que meramente recebe um \textit{input} e retorna um \textit{output}, encerrando-se num estado de terminação. Um sistema reativo, na verdade, é um programa que está em constate execução e sempre interagindo com o seu ambiente. Neste sentido, podemos dizer que um sistema reativo está num ciclo infinito de respostas. Exemplos típicos deste tipo de sistema são: protocolos de comunicação, sistemas embarcados, sistemas operacionais, etc. 
 	
-	Muitos destes sistemas se enquadram como de missão crítica, ou seja, uma falha de \textit{software} pode causar danos graves, seja para a vida de pessoas, como em programas médicos, ou para a economia \cite{?}. Apesar das dificuldades que o desenvolvimento destes sistemas podem ter, grande parte deles possui um domínio finito de estados, o que permite uma busca exaustiva em todos os estado os estados alcançáveis pelo sistema. Desta forma, é possível verificar com precisão matemática se um sistema possui uma determinada propriedade \cite{?}. Na literatura, esta abordagem exaustiva no espaço de estados se chama \textbf{verificação de modelos} (\textit{model checking}).
+	Muitos destes sistemas se enquadram como de missão crítica, ou seja, uma falha de \textit{software} pode causar danos graves, seja para a vida de pessoas, como em programas médicos, ou para a economia \cite{?}. Apesar das dificuldades que o desenvolvimento destes sistemas podem ter, grande parte deles possui um domínio finito de estados, o que permite uma busca exaustiva em todos os estado alcançáveis pelo sistema. Desta forma, é possível verificar com precisão matemática se um sistema possui uma determinada propriedade \cite{?}. Na literatura, esta abordagem exaustiva no espaço de estados se chama \textbf{verificação de modelos} (\textit{model checking}). 
 	
-	Desde a sua gênese, a área de verificação de modelos vem ganhando cada vez mais espaço em aplicações reais. O maior sucesso da área está no contexto de \textit{hardware}, com ferramentas de verificação sendo essenciais em programas de síntese de circuitos digitais \cite{?}. Ao contrário do caso do \textit{hardware}, há uma recepção menor para \textit{softwares}, principalmente em aplicações já desenvolvidas. Contudo, isto é razão para o progresso da verificação de modelos. Ademais, segundo \citeonline{clarkeIntroductionModelChecking2018}, há três fatos que garantirão o progresso e o sucesso da área, sendo eles: a onipresença de hardwares e softwares só aumenta, evoluindo ainda mais a complexidade da comunicação e se tornando ainda mais presente em missões críticas; há uma mudança na avaliação de qualidade computacional para além do desempenho e do número de funcionalidades, há uma crescente valorização da correção, confiabilidade, segurança e robustez; por fim, os sistemas de transição estados pode ser usado universalmente como ferramenta em outras áreas, como na produção, design, biologia, etc.
+	Para isto, um sistema é descrito num sistema de transição o qual será verificado para saber se é um modelo ou não de um fórmula de uma lógica temporal. Uma lógica temporal é um lógica modal onde os operadores modais possuem um interpretação de tempo, sendo ideias para expressar as propriedades de forma precisa de um sistema reativo, o qual justamente executa por um período indeterminado. Especificamente, na verificação de modelos, geralmente estas lógicas apenas lidam com operadores futuros. Como a verificação é feita em todo o espaço de estados, a verificação de modelos possui o problema da \textbf{explosão do espaço de estados}, o que leva a algoritmos buscarem formas de reduzir o espaço, seja por otimização direta em algoritmos explicito ou uma representação simbólica ou abstrata do modelo \cite{??}.
+	
+	Desde a sua gênese, a área de verificação de modelos vem ganhando cada vez mais espaço em aplicações reais. O maior sucesso da área está no contexto de \textit{hardware}, com ferramentas de verificação sendo essenciais em programas de síntese de circuitos digitais \cite{?}. Ao contrário do caso do \textit{hardware}, há uma recepção menor para \textit{softwares}, principalmente em aplicações já desenvolvidas. 
+	Contudo, isto é razão para o progresso da verificação de modelos. Ademais, segundo \citeonline{clarkeIntroductionModelChecking2018}, há três fatos que garantirão o progresso e o sucesso da área, sendo eles: a onipresença de hardwares e softwares só aumenta, evoluindo ainda mais a complexidade da comunicação e se tornando ainda mais presente em missões críticas; há uma mudança na avaliação de qualidade computacional para além do desempenho e do número de funcionalidades, há uma crescente valorização da correção, confiabilidade, segurança e robustez; por fim, os sistemas de transição estados pode ser usado universalmente como ferramenta em outras áreas, como na produção, design, biologia, etc.
 	
 	
 	
-	\section{Objetivos}
+	\section{Objetivos e Metodologia}
+	Visto a importância da área, o objetivo geral deste trabalho é revisar os principais avanços de verificarão de modelos. 
+	Dado que existem diferentes lógicas para descrever as propriedades a serem verificadas, o escopo desta investigação será reduzido à lógica \textit{Computation Tree Logic} (CTL) sem \textit{fairness} e sem a construção de contraexemplos. 
+	A revisão foi feita seguindo os principais livros-texto da área. 
+	Além disto, os principais algoritmos foram implementados incrementalmente, assim, foi possível averiguar as dificuldades teoricamente apresentadas. 
+	Tudo isto fora feito com o intuito de tentar se aproximar do estado da arte, i.e., o que as principais ferramentas acadêmicas e comerciais fazem. 
 	
-	\section{Metodologia}
+	
+	Em virtude disso, o verificador implementado foi comparado com uma ferramenta já consolidada, no caso, NuSMV. E cada passo desenvolvido foi devidamente documentado.
+	A comparação serviu para a correção dos algoritmos e também para comparar a eficiência de tempo e memória de uma implementação simples, construída num projeto individual, seguindo como referência o que está disponível em livros-textos. 
+	Desta forma, contrastando com uma ferramenta industrial aperfeiçoada por décadas.  
+	Para efetuar tal comparação, foi definido um subconjunto da linguagem SMV, a linguagem de descrição do modelo usada no NuSMV, para que ambas as ferramentas processem o mesmo sistema de transições.
+	
 	\subsection{Implementação}
-	\subsection{Instâncias de teste}
+	NuSMV é implementado em C. Com isto em mente, a implementação do verificador (DAR UM NOME PARA ELE), para ter uma comparação justa, também foi implementado numa linguagem mais próxima ao hardware. No caso, a linguagem Rust foi escolhida por apresentar algumas boas conveniências de desenvolvimento, como seu gerenciador de pacotes \textit{cargo}, garantindo um melhor gerenciamento de dependências e, consequentemente, reprodutibilidade dos experimentos. Além disso, Rust se sobressai por ser uma linguagem moderna e segura no que tange o gerenciamento de memória. As bibliotecas e suas versões usadas encontram-se na documentação do projeto nos arquivos \textit{Cargo.toml} e \textit{Cargo.lock}, disponível em \cite{??}.
+	O projeto também foi desenvolvido com o uso do gerenciador de pacotes \textit{Nix} e sua funcionalidade experimental \textit{flake}, o que permite a fixação de dependências, permitindo que o projeto tenha uma etapa de \textit{build} consistente e reproduzível em diferentes máquinas (????).
+
+	\subsection{Metodologia dos testes}
+	\subsubsection*{Instâncias}
+	Diversas instâncias foram selecionadas para testar o verificador, ver os limites de cada algoritmo. A preferência foi por problemas paramétricos em que é possível averiguar os efeitos num problema de mesma natureza, mas com um crescimento no número de estados. A forma em que cada instância é gerada e quais propriedades são verificadas podem ser vistas na documentação do projeto. As instâncias de teste são:
+	\begin{itemize}
+		\item \textit{dining\_N}: o clássico problema do jantar dos filósofos, onde $N$ é o número de filósofos sentados a mesa.
+		\item \textit{counter\_N}: um contador binário de $N$ bits. Possui uma estrutura facilmente explorável por algoritmos simbólicos e péssimo para algoritmos explícitos.
+		\item \textit{rule30\_N}: um automato celular da regra 30. Um problema de natureza caótica.
+		\item \textit{coi\_chaos\_killer\_N}: um problema que necessita de uma otimização de \textit{cone of influence} para poder ser resolvido.
+		\item \textit{bad\_order\_N}: o pior caso de um ordenamento de variáveis, usado principalmente para testar a qualidade dos reordenamento em BDDs.
+	\end{itemize}
+	
+	
+	\subsubsection*{Coleta de dados}
 	\subsection{Ambiente de Desenvolvimento}
+	Configuração do PC?
 	\subsection{Uso de Inteligência Artificial Generativa}
+	Inteligências artificiais generativas foram usadas no desenvolvimento do verificador. O seu uso principal foi em código não relevante para a compreensão dos algoritmos, como no desenvolvimento do \textit{parsing}, na produção de testes unitários, na refatoração de código, na interface de linha de comando e na documentação inicial. Os modelos usados foram \textbf{Gemini 3.1} e \textbf{Claude Sonnet 4.6}.
 	
 	
 	
@@ -538,7 +568,7 @@
 	
 	
 	\section{Codificação de Variáveis}
-	Variáveis de domínios finitos são mapeadas para vetores de bits booleanos de acordo com o tamanho do domínio do tipo de dado. Seja $len(x)$ o domínio de uma variável do ssmv (inteiro, booliana ou enumeração). A quantidade de variáveis (boolianas do BDD) necessárias para representar cada variável do ssmv é igual a $\lceil \log_2(len(x))\rceil$. 
+	Variáveis de domínios finitos são mapeadas para vetores de bits boolianos de acordo com o tamanho do domínio do tipo de dado. Seja $len(x)$ o domínio de uma variável do ssmv (inteiro, booliana ou enumeração). A quantidade de variáveis (boolianas do BDD) necessárias para representar cada variável do ssmv é igual a $\lceil \log_2(len(x))\rceil$. 
 	
 	\subsection*{Exemplo}
 	Caso $n: 0..7$, teremos $len(n) = 8$, assim $\lceil \log_2(len(n))\rceil = \lceil \log_2(8)\rceil = 3$, ou seja, precisaremos de 3 variáveis para representar a variável $n$ do ssmv.
@@ -608,6 +638,8 @@
 	\chapter{Verificação de modelos simbólica}
 	\section{Algortimo de derificação simbólica}
 	\subsection{Notas de implementação}
+	\textbf{OxiDD}: uma biblioteca para \textit{Binary Decision Diagrams} (BDDs) apresentada em \citeonline{husungOxiDDSafeConcurrent2024}.
+	
 	\subsection{Resultados e Avaliação}
 	Os testes foram realizados comparando o SSMV com o NuSMV. Os resultados estão resumidos na Tabela \ref{tab:bench}.
 	
