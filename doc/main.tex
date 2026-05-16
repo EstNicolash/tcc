@@ -33,6 +33,8 @@
 \newcommand{\ex}{\text{EX}}
 \newcommand{\eu}{\text{EU}}
 \newcommand{\eg}{\text{EG}}
+\def\sectionautorefname{Seção}
+\def\chapterautorefname{Capítulo}
 
 \title{Lorem Ipsum}
 \translatedtitle{Lorem}
@@ -66,6 +68,9 @@
 	\listoftables
 	
 	\chapter{Introdução}
+	
+	Este capítulo apresenta a contextualização do trabalho, abordando a relevância da verificação formal, seus objetivos e metodologia.
+	
 	\section{Motivação}
 	
 	Um sistema reativo é um programa cujo comportamento não é a mera computação de um função, i.e., um programa que meramente recebe um \textit{input} e retorna um \textit{output}, encerrando-se num estado de terminação. Um sistema reativo, na verdade, é um programa que está em constate execução e sempre interagindo com o seu ambiente. Neste sentido, podemos dizer que um sistema reativo está num ciclo infinito de respostas. Exemplos típicos deste tipo de sistema são: protocolos de comunicação, sistemas embarcados, sistemas operacionais, etc. 
@@ -104,7 +109,8 @@
 		\item \textit{counter\_N}: um contador binário de $N$ bits. Possui uma estrutura facilmente explorável por algoritmos simbólicos e péssimo para algoritmos explícitos.
 		\item \textit{rule30\_N}: um automato celular da regra 30. Um problema de natureza caótica.
 		\item \textit{coi\_chaos\_killer\_N}: um problema que necessita de uma otimização de \textit{cone of influence} para poder ser resolvido.
-		\item \textit{bad\_order\_N}: o pior caso de um ordenamento de variáveis, usado principalmente para testar a qualidade dos reordenamento em BDDs.
+		\item \textit{bad\_order\_N}: o pior caso de um ordenamento de variáveis, usado principalmente para testar a qualidade dos reordenamento em BDDs.  
+		\item ...
 	\end{itemize}
 	
 	
@@ -118,11 +124,15 @@
 	
 	
 	\chapter{Fundamentação Teórica}
-	\section{Descrição de sistemas e descrição de propriedades}
 	
-		
+
+	Um sistema deve ser descrito seguindo um formalismo específico onde suas componentes e comportamentos principias são abstraídas numa estrutura matemática. O formalismo é a semântica de Kripke apresentado na \autoref{sec:estruturas_de_kripke}. Segundo \citeonline{baierPrinciplesModelChecking2008a}, as propriedades de sistemas reativos são de dois tipos: propriedades de segurança (\textit{safety}) e de vivacidade (\textit{liveness}). Informalmente, as propriedades de segurança garantem que algo de ruim numa aconteça. Um exemplo mais simples deste tipo é verificação de invariantes. Já as propriedades de vivacidade garantem que algo de bom aconteça. Qualquer outra propriedade é uma composição de propriedades destes dois tipos. Estas propriedades são formalizadas por meio de lógicas temporais. A lógica temporal estudada neste trabalho é apresentada na \autoref{sec:ctl}. O formalismo apresentado segue 
+	as principalmente as construções de \citeonline{blackburnModalLogic2010} e \citeonline{baierPrinciplesModelChecking2008a}.
+	
 	\section{Estruturas de Kripke}
-	A semântica de mundos possíveis é o formalismo padrão para lógicas modais \cite{fittingFirstOrderModalLogic2023}. Um \textit{\textbf{frame}} é um par ordenado $(S, R)$ onde:   
+	\label{sec:estruturas_de_kripke}
+	
+	A semântica de mundos possíveis (ou semântica de Kripke) é o formalismo padrão para lógicas modais \cite{fittingFirstOrderModalLogic2023}. Um \textit{\textbf{frame}} é um par ordenado $(S, R)$ onde:   
 		\begin{itemize}
 		\item $S$ é um conjunto finito de \textbf{objetos} (mundos possíveis, estados, etc.).
 		\item $R \subseteq S \times S$ é uma \textbf{relação de acessibilidade}.
@@ -136,9 +146,10 @@
 	\end{itemize}
 	
 	\par
-	No contexto de verificação de modelos, um sistema reativo é modelado para esta semântica, com o adicional do conjunto $I$ de \textbf{estados iniciais} tal que $I \subseteq S$ para capturar o equivalente de \textbf{sistemas de transição}. Em \cite{clarkeHandbookModelChecking2018} e \cite{clarkeModelChecking2018}, a tupla $(M,I)$ são chamadas de \textbf{estruturas de Kripke}. No caso da \textit{Computation Tree Logic} (CTL), há o adicional de a relação de acessibilidade $R$ necessita ser total, i.e.,  $\forall_s\exists_{s'}((s,s')\in R)$ onde $s,s'\in S$.
+	No contexto de verificação de modelos, um sistema reativo é modelado para esta semântica, com o adicional do conjunto $I$ de \textbf{estados iniciais} tal que $I \subseteq S$ para capturar o equivalente de \textbf{sistemas de transição}. Em \citeonline{clarkeHandbookModelChecking2018} e \citeonline{clarkeModelChecking2018}, a tupla $(M,I)$ são chamadas de \textbf{estruturas de Kripke}. No caso da \textit{Computation Tree Logic} (CTL), há o adicional de a relação de acessibilidade $R$ necessita ser total, i.e.,  $\forall_s\exists_{s'}((s,s')\in R)$ onde $s,s'\in S$. 
 	
 	\section{Computation Tree Logic (CTL)}
+	\label{sec:ctl}
 	Seguindo a formalização de \cite{baierPrinciplesModelChecking2008a}.
 	
 	\subsection{Interpretação do tempo}
@@ -656,6 +667,7 @@
 	\end{table}
 	
 	\section{Verificação simbólica com reordenamento de variáveis estático}
+	Foram usados o ordenamento topológico (ordem de declaração do arquivo .smv), aleatório, heurística FORCE de \citeonline{aloulFORCEFastEasytoimplement2003} e heurística \textit{sifting} produzida pelo NuSMV.
 	\subsection{Notas de implementação}
 	\subsection{Resultados e Avaliação}
 	
