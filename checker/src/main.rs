@@ -6,8 +6,10 @@ mod modeling;
 mod specs;
 
 use crate::io::read_order_file::read_order_file;
+use crate::modeling::expansion;
+use crate::modeling::ordering::{OrderingStrategy, compute_ordering};
 use clap::Parser;
-use cli::{Algorithm, Cli, Commands, InputFormat};
+use cli::{Algorithm, Cli, Commands, InputFormat, OrderInput};
 use colored::*;
 use memory_stats::memory_stats;
 use oxidd::{Manager, ManagerRef};
@@ -66,7 +68,7 @@ fn main() {
 fn run_verification(
     model_path: String,
     _spec_path: Option<String>,
-    order_path: Option<String>,
+    order: Option<OrderInput>,
     format: InputFormat,
     algorithm: Algorithm,
 ) {
@@ -131,14 +133,22 @@ fn run_verification(
         Algorithm::Bdd => {
             println!("{} Using Symbolic BDD algorithm (OxiDD)...", "ℹ".blue());
 
-            let explicit_order = order_path.map(|path| read_order_file(&path));
-            if explicit_order.is_some() {
-                println!("{} Loaded custom variable ordering.", "✔".green());
-            }
+            let static_order = order.and_then(|input| match input {
+                OrderInput::Default => None,
+                OrderInput::File(path) => Some(read_order_file(&path)),
+                OrderInput::Random(seed) => Some(compute_ordering(
+                    &symbolic_model,
+                    OrderingStrategy::Random { seed },
+                )),
+                OrderInput::Force(iterations) => Some(compute_ordering(
+                    &symbolic_model,
+                    OrderingStrategy::Force { iterations },
+                )),
+            });
 
             let compile_start = Instant::now();
             let symbolic_ctx =
-                modeling::bdd_compiler::compile_model_to_bdd(&symbolic_model, explicit_order);
+                modeling::bdd_compiler::compile_model_to_bdd(&symbolic_model, static_order);
 
             // Collect BDD node count from OxiDD Manager
             record.static_nodes = symbolic_ctx

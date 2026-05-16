@@ -195,7 +195,7 @@ impl SymbolicContext {
 ///
 /// # Returns
 /// The number of bits required to represent the domain size.
-fn calc_bits(domain_size: usize) -> usize {
+pub fn calc_bits(domain_size: usize) -> usize {
     if domain_size <= 1 {
         1
     } else {

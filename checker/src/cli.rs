@@ -20,8 +20,8 @@ pub enum Commands {
         /// Path to the specification file (.spec)
         spec_path: Option<String>,
 
-        #[arg(short, long)]
-        order: Option<String>,
+        #[arg(short, long, value_parser = parse_order)]
+        order: Option<OrderInput>,
 
         /// Format of the model input
         #[arg(short, long, value_enum, default_value_t = InputFormat::Ssmv)]
@@ -54,4 +54,34 @@ pub enum Algorithm {
     Labelling,
     LabellingScc,
     Bdd,
+}
+
+#[derive(Clone, Debug)]
+pub enum OrderInput {
+    Default,
+    File(String),
+    Random(u64),
+    Force(usize),
+}
+
+fn parse_order(s: &str) -> Result<OrderInput, String> {
+    if s.to_lowercase() == "default" {
+        return Ok(OrderInput::Default);
+    }
+
+    if let Some(seed_str) = s.strip_prefix("random:") {
+        let seed = seed_str
+            .parse::<u64>()
+            .map_err(|_| format!("Invalid seed '{}'. u64 expected.", seed_str))?;
+        return Ok(OrderInput::Random(seed));
+    }
+
+    if let Some(iter_str) = s.strip_prefix("force:") {
+        let iterations = iter_str
+            .parse::<usize>()
+            .map_err(|_| format!("Invalid iteration number '{}'. usize expected.", iter_str))?;
+        return Ok(OrderInput::Force(iterations));
+    }
+
+    Ok(OrderInput::File(s.to_string()))
 }
