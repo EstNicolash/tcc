@@ -1,3 +1,11 @@
+//! # Module kripke_structure
+//! This module provides utilities for working with Kripke structures.
+//!
+//! # Public Types
+//! - `StateID`: A unique identifier for a state in the Kripke structure.
+//! - `KripkeStructure`: The final, read-only Kripke structure used by the labelling algorithm.
+//!
+
 use fixedbitset::FixedBitSet;
 use std::collections::HashMap;
 

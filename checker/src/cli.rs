@@ -63,7 +63,16 @@ pub enum OrderInput {
     Random(u64),
     Force(usize),
 }
-
+/// Parses the order input string into an [`OrderInput`] enum value.
+///
+/// # Arguments
+///
+/// * `s` - The order input string to parse
+///
+/// # Returns
+///
+/// * `Ok(OrderInput)` - The parsed [`OrderInput`] value
+/// * `Err(String)` - An error message if the input string is invalid
 fn parse_order(s: &str) -> Result<OrderInput, String> {
     if s.to_lowercase() == "default" {
         return Ok(OrderInput::Default);

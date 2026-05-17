@@ -1,4 +1,17 @@
 //! # Module ssmv_ast
+//!
+//! This module provides the AST (Abstract Syntax Tree) representation of SSMV models.
+//!
+//! # Public Types and Structures
+//!
+//! - [`ExprID`]: Represents an expression ID.
+//! - [`IdentifierID`]: Represents an identifier ID.
+//! - [`SsmvExpr`]: Represents an SSMV expression.
+//! - [`SsmvType`]: Represents an SSMV type.
+//! - [`SsmvVariable`]: Represents an SSMV variable.
+//! - [`SsmvDefine`]: Represents an SSMV define.
+//! - [`SsmvAssignment`]: Represents an SSMV assignment.
+//!
 
 use crate::specs::ctl_formula::{CtlFormulaArena, FormulaID};
 use std::collections::HashMap;

@@ -1,3 +1,7 @@
+//! # Module read_order_file
+//!
+//! This module provides functions for reading NuSMV-style .ord files.
+
 use colored::*;
 /// Reads a NuSMV-style .ord file and returns a list of variable/bit names.
 pub fn read_order_file(path: &str) -> Vec<String> {

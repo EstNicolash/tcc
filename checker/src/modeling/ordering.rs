@@ -1,3 +1,7 @@
+//! # Module `ordering`
+//!
+//! This module provides BDD variable ordering heuristics for symbolic model expansion.
+//!
 //! # BDD Variable Ordering Heuristics
 //!
 //! Produces a `Vec<String>` in the same format as `SymbolicContext::new`'s

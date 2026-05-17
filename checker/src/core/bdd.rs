@@ -1,4 +1,6 @@
-// bdd.rs
+///! # Module bdd
+///! BDD utilities for symbolic model checking.
+///
 use crate::modeling::symbolic::{Domain, Model};
 use oxidd::bdd::BDDFunction;
 use oxidd::bdd::BDDManagerRef;
@@ -36,7 +38,7 @@ pub struct VarBits {
     pub curr: Vec<u32>,
     pub next: Vec<u32>,
 }
-
+/// Resolves a bit name to a variable index and bit index in the model.
 fn resolve_bit_name(name: &str, model: &Model) -> Option<(usize, usize)> {
     if name.contains('.') {
         let parts: Vec<&str> = name.split('.').collect();
@@ -58,7 +60,6 @@ fn resolve_bit_name(name: &str, model: &Model) -> Option<(usize, usize)> {
         Some((var_idx, 0))
     }
 }
-
 impl SymbolicContext {
     /// Creates a new symbolic context from the given model.
     ///

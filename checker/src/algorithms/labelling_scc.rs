@@ -1,3 +1,6 @@
+//! # Module labelling_scc
+//!
+//! Labelling algorithm for verifying CTL specifications against a Kripke structure using EX, EG and EU as primitives.
 use crate::algorithms::labelling::LabelingProvider;
 use crate::core::kripke_structure::{KripkeStructure, StateID};
 use crate::modeling::expansion::eval;
@@ -97,6 +100,12 @@ fn convert_to_core<P: Copy + Eq + std::hash::Hash>(
     memo.insert(f_id, new_id);
     new_id
 }
+
+/// Converts the model's CTL specs to core CTL formulas
+///
+/// # Arguments
+///
+/// * `model` - The model to purify.
 fn purify_model_specs(model: &mut Model) {
     let mut core_arena = CtlFormulaArena::new();
     let mut memo = HashMap::new();
@@ -112,12 +121,20 @@ fn purify_model_specs(model: &mut Model) {
     model.ctl_arena = core_arena;
     model.specs = core_specs;
 }
+
+/// Tarjan's algorithm state for SCC iterative version
 struct TarjanState {
+    /// The index of each state in the Tarjan algorithm
     indices: Vec<Option<usize>>,
+    /// The lowlink of each state in the Tarjan algorithm
     lowlinks: Vec<usize>,
+    /// Whether each state is on the stack in the Tarjan algorithm
     on_stack: Vec<bool>,
+    /// The stack of states in the Tarjan algorithm
     tarjan_stk: Vec<StateID>,
+    /// The next index to assign to a state in the Tarjan algorithm
     next_index: usize,
+    /// The SCCs found by the Tarjan algorithm
     sccs: Vec<Vec<StateID>>,
 }
 
@@ -133,6 +150,7 @@ impl TarjanState {
         }
     }
 
+    /// Discovers a state in the Tarjan algorithm, assigning it an index and pushing it onto the stack.
     fn discover(&mut self, u: StateID) {
         let idx = u.0 as usize;
         self.indices[idx] = Some(self.next_index);
@@ -142,6 +160,7 @@ impl TarjanState {
         self.on_stack[idx] = true;
     }
 
+    /// Tries to emit an SCC from the Tarjan algorithm, popping states from the stack until the lowlink of `u` is reached.
     fn try_emit_scc(&mut self, u: StateID) {
         let u_idx = u.0 as usize;
         if self.lowlinks[u_idx] != self.indices[u_idx].unwrap() {
@@ -159,7 +178,15 @@ impl TarjanState {
         self.sccs.push(scc);
     }
 }
-
+/// Recursively performs the strong connect step of Tarjan's algorithm.
+///
+/// # Arguments
+///
+/// * `structure` - The Kripke structure to label.
+/// * `f_sat` - The set of states that satisfy the formula.
+/// * `u` - The state to label.
+/// * `ctx` - The Tarjan state to update.
+///
 fn strong_connect_rec(
     structure: &KripkeStructure,
     f_sat: &FixedBitSet,
@@ -185,7 +212,16 @@ fn strong_connect_rec(
 
     ctx.try_emit_scc(u);
 }
-
+/// Performs Tarjan's algorithm to find SCCs in a Kripke structure recursively.
+///
+/// # Arguments
+///
+/// * `structure` - The Kripke structure to label.
+/// * `f_sat` - The set of states that satisfy the formula.
+///
+/// # Returns
+///
+/// A vector of SCCs, where each SCC is represented as a vector of `StateID`s.
 pub fn tarjan_scc_recursive(structure: &KripkeStructure, f_sat: &FixedBitSet) -> Vec<Vec<StateID>> {
     let mut ctx = TarjanState::new(structure.num_states());
 
@@ -197,6 +233,16 @@ pub fn tarjan_scc_recursive(structure: &KripkeStructure, f_sat: &FixedBitSet) ->
     ctx.sccs
 }
 
+/// Performs Tarjan's algorithm to find SCCs in a Kripke structure iteratively.
+///
+/// # Arguments
+///
+/// * `structure` - The Kripke structure to label.
+/// * `f_sat` - The set of states that satisfy the formula.
+///
+/// # Returns
+///
+/// A vector of SCCs, where each SCC is represented as a vector of `StateID`s.
 pub fn tarjan_scc_iterative(structure: &KripkeStructure, f_sat: &FixedBitSet) -> Vec<Vec<StateID>> {
     let mut ctx = TarjanState::new(structure.num_states());
 
@@ -254,7 +300,16 @@ pub fn tarjan_scc_iterative(structure: &KripkeStructure, f_sat: &FixedBitSet) ->
 
     ctx.sccs
 }
-
+/// Performs Tarjan's algorithm to find SCCs in a Kripke structure, using either the recursive or iterative algorithm.
+///
+/// # Arguments
+///
+/// * `structure` - The Kripke structure to label the states with.
+/// * `f_sat` - The set of states that satisfy the formula.
+///
+/// # Returns
+///
+/// A vector of SCCs, where each SCC is represented as a vector of `StateID`s.
 pub fn tarjan_scc(structure: &KripkeStructure, f_sat: &FixedBitSet) -> Vec<Vec<StateID>> {
     tarjan_scc_iterative(structure, f_sat)
 }
@@ -499,6 +554,16 @@ fn label_formula(
     }
 }
 
+/// Verify the specifications (labelling algorithm) of the model against the given Kripke structure, returning a vector of results for each spec.
+///
+/// # Arguments
+///
+/// * `structure` - The Kripke structure to verify against.
+/// * `model` - The model with specifications to verify.
+///
+/// # Returns
+///
+/// A vector of boolean results, one for each specification in the model.
 pub fn verify(structure: &KripkeStructure, mut model: Model) -> Vec<bool> {
     purify_model_specs(&mut model);
 

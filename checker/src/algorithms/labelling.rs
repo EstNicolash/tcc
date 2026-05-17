@@ -1,3 +1,7 @@
+//! # Module labelling
+//!
+//! Labelling algorithm for verifying CTL specifications against a Kripke structure using EX, AF and EU as primitives.
+
 use crate::core::kripke_structure::{KripkeStructure, StateID};
 use crate::modeling::expansion::eval;
 use crate::modeling::symbolic::Model;
@@ -175,6 +179,12 @@ fn convert_to_core<P: Copy + Eq + std::hash::Hash>(
     new_id
 }
 
+/// Converts the model's CTL specs to core form and replaces the arena and specs in the model.
+///
+/// # Arguments
+///
+/// * `model` - The model to purify the specs for.
+///
 pub fn purify_model_specs(model: &mut Model) {
     let mut core_arena = CtlFormulaArena::new();
     let mut memo = HashMap::new();
@@ -401,7 +411,7 @@ fn label_formula(
                 todo.push(StateID(s_idx as u32));
             }
 
-            // 4. Backward propagation: if all successors of a parent are marked, the parent also enters
+            // Backward propagation: if all successors of a parent are marked, the parent also enters
             while let Some(state_id) = todo.pop() {
                 for &pred in structure.get_predecessors(state_id) {
                     let pred_idx = pred.0 as usize;
@@ -428,7 +438,16 @@ fn label_formula(
         _ => panic!("Error: Operator {:?} should be converted!", formula),
     }
 }
-
+/// Verify the specifications (labelling algorithm) of the model against the given Kripke structure, returning a vector of results for each spec.
+///
+/// # Arguments
+///
+/// * `structure` - The Kripke structure to verify against.
+/// * `model` - The model with specifications to verify.
+///
+/// # Returns
+///
+/// A vector of boolean results, one for each specification in the model.
 pub fn verify(structure: &KripkeStructure, mut model: Model) -> Vec<bool> {
     purify_model_specs(&mut model);
 
@@ -436,6 +455,7 @@ pub fn verify(structure: &KripkeStructure, mut model: Model) -> Vec<bool> {
     let num_formulas = model.ctl_arena.len();
     let mut provider = LabelingProvider::new(num_states, num_formulas);
 
+    // Labels each subformula in the formula arena.
     // The formula arena is always ordered by subformulas due to the recursive insertion process.
     for f_idx in 0..num_formulas {
         let f_id = FormulaID(f_idx as u32);
@@ -444,6 +464,7 @@ pub fn verify(structure: &KripkeStructure, mut model: Model) -> Vec<bool> {
 
     let mut results = Vec::new();
 
+    // Evaluates each specification against the labeled states.
     for &spec_id in &model.specs {
         if let Some(marks_bitset) = provider.get_states_for_formula(spec_id) {
             let initial = structure.get_initial_states();

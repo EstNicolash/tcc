@@ -1,3 +1,7 @@
+//! # Module bdd_fixpoint
+//!
+//! Fixpoint algorithm for BDD-based symbolic model checking.
+
 use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
 use std::collections::HashMap;
 
@@ -55,8 +59,6 @@ impl SymbolicSatProvider {
     }
 }
 /// Converts a CTL formula to its equivalent core form for the bdd algorithm.
-///
-///
 ///
 /// # Arguments
 ///
@@ -148,6 +150,13 @@ fn convert_to_core<P: Copy + Eq + std::hash::Hash>(
     new_id
 }
 
+/// Converts the model's CTL specs to core CTL formulas and replaces the model's CTL arena and specs.
+///
+/// # Arguments
+/// * `model` - The model to transform.
+///
+/// # Returns
+/// The transformed model with purified CTL specs.
 pub fn purify_model_specs(model: &mut Model) {
     let mut core_arena = CtlFormulaArena::new();
     let mut memo = HashMap::new();

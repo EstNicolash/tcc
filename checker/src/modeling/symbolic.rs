@@ -1,12 +1,31 @@
+//! # Module `symbolic`
+//!
+//! This module provides symbolic representations of SSMV expressions and function to translate a SSMV AST into a symbolic representation.
+//!
+//! # Public Types and Structures
+//!
+//! - [`SymbolicExprID`]: Represents a symbolic expression ID.
+//! - [`Value`]: Represents a value in the symbolic context.
+//! - [`SymbolicExpr`]: Represents a symbolic expression.
+//! - [`SymbolicArena`]: Arena for managing symbolic expressions.
+//!
+//!
+//! # Public Functions
+//!
+//! - [`translate_ssmv_ast`]: Translates a SSMV AST into a symbolic representation.
+//!
+
 use crate::modeling::ssmv_ast::{
     ExprID, IdentifierID, SsmvArena, SsmvAssignment, SsmvExpr, SsmvModel, SsmvType,
 };
 use crate::specs::ctl_formula::{CtlFormula, CtlFormulaArena, FormulaID};
 use std::collections::HashMap;
 
+/// Represents a symbolic expression ID.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SymbolicExprID(pub u32);
 
+/// Represents a value in the symbolic context.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
     Bool(bool),
@@ -14,6 +33,7 @@ pub enum Value {
     Enum(usize),
 }
 
+/// Represents a symbolic expression.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SymbolicExpr {
     Literal(Value),
@@ -24,14 +44,20 @@ pub enum SymbolicExpr {
     Set { start: u32, len: u32 },
 }
 
+/// Arena for managing symbolic expressions.
 pub struct SymbolicArena {
+    /// Expressions stored in the arena.
     pub expressions: Vec<SymbolicExpr>,
+    /// Buffer for case expressions.
     pub case_buffer: Vec<(SymbolicExprID, SymbolicExprID)>,
+    /// Buffer for set expressions.
     pub set_buffer: Vec<SymbolicExprID>,
+    /// Lookup table for expressions, mapping expressions to their IDs.
     expr_lookup: HashMap<SymbolicExpr, SymbolicExprID>,
 }
 
 impl SymbolicArena {
+    /// Creates a new, empty symbolic arena.
     pub fn new() -> Self {
         Self {
             expressions: Vec::new(),
@@ -41,6 +67,9 @@ impl SymbolicArena {
         }
     }
 
+    /// Allocates a new expression in the arena, returning its ID.
+    ///
+    /// If the expression already exists in the arena, returns its ID instead of allocating a new one.
     pub fn alloc_expr(&mut self, expr: SymbolicExpr) -> SymbolicExprID {
         if let Some(&id) = self.expr_lookup.get(&expr) {
             return id;
@@ -52,16 +81,25 @@ impl SymbolicArena {
     }
 }
 
+/// Represents a model with symbolic expressions.
 pub struct Model {
+    /// Variables in SSMV.
     pub variables: Vec<Variable>,
+    /// Initial assignments in SSMV.
     pub init_assignments: Vec<(usize, SymbolicExprID)>,
+    /// Next assignments in SSMV.
     pub next_assignments: Vec<(usize, SymbolicExprID)>,
+    /// Specs in CTLSPEC.
     pub specs: Vec<FormulaID>,
+    /// Arena for symbolic expressions.
     pub arena: SymbolicArena,
+    /// Arena for SSMV AST names.
     pub ast_names: SsmvArena,
+    /// Arena for CTL formulae.
     pub ctl_arena: CtlFormulaArena<SymbolicExprID>,
 }
 
+/// Represents a binary operator in a symbolic expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
     And,
@@ -79,17 +117,20 @@ pub enum BinaryOp {
     Div,
 }
 
+/// Represents a unary operator in a symbolic expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
     Not,
     Neg,
 }
 
+/// Represents a variable in SSMV.
 pub struct Variable {
     pub _name: IdentifierID,
     pub domain: Domain,
 }
 
+/// Represents a domain for a variable in SSMV.
 #[derive(Debug, Clone)]
 pub enum Domain {
     Boolean,
@@ -97,6 +138,7 @@ pub enum Domain {
     Enum(Vec<IdentifierID>),
 }
 
+/// Maps a binary operator string to a [`BinaryOp`] enum variant.
 fn map_bin_op(op: &str) -> BinaryOp {
     match op {
         "&" | "and" => BinaryOp::And,
@@ -116,6 +158,7 @@ fn map_bin_op(op: &str) -> BinaryOp {
     }
 }
 
+/// Maps a unary operator string to a [`UnaryOp`] enum variant.
 fn map_un_op(op: &str) -> UnaryOp {
     match op {
         "!" | "not" => UnaryOp::Not,
@@ -124,6 +167,23 @@ fn map_un_op(op: &str) -> UnaryOp {
     }
 }
 
+/// Rebases a CTL formula from an AST expression ID arena to a symbolic expression ID arena.
+///
+/// # Arguments
+///
+/// * `ast_f_id` - The ID of the formula in the AST arena.
+/// * `old_arena` - The AST arena containing the formula.
+/// * `new_arena` - The symbolic expression arena to rebase the formula into.
+/// * `memo` - A memoization map to avoid recomputing rebased formulas.
+/// * `ast_arena` - The AST arena containing the formula.
+/// * `sym_arena` - The symbolic expression arena to rebase the formula into.
+/// * `var_map` - A map from variable IDs to their index in the symbolic arena.
+/// * `def_map` - A map from definition IDs to their expression ID in the AST arena.
+/// * `enum_map` - A map from enum IDs to their index and size in the symbolic arena.
+///
+/// # Returns
+///
+/// The ID of the rebased formula in the symbolic arena.
 fn rebase_ctl_formula(
     ast_f_id: FormulaID,
     old_arena: &CtlFormulaArena<ExprID>,
@@ -182,6 +242,15 @@ fn rebase_ctl_formula(
     new_id
 }
 
+/// Builds a [`Model`] from an SSMV AST.
+///
+/// # Arguments
+///
+/// * `ast` - The SSMV AST to build the model from.
+///
+/// # Returns
+///
+/// The built [`Model`].
 pub fn build_model(ast: SsmvModel) -> Model {
     let mut sym_arena = SymbolicArena::new();
 
@@ -260,6 +329,15 @@ pub fn build_model(ast: SsmvModel) -> Model {
     }
 }
 
+/// Builds the indices for variables, definitions, and enums in the AST.
+///
+/// # Arguments
+///
+/// * `ast` - The SSMV AST to build the indices from.
+///
+/// # Returns
+///
+/// A tuple containing the variable, definition, and enum maps.
 fn build_indices(
     ast: &SsmvModel,
 ) -> (
@@ -292,7 +370,21 @@ fn build_indices(
 
     (var_map, def_map, enum_map)
 }
-
+/// Translates an SSMV AST expression to a symbolic expression.
+///
+/// # Arguments
+///
+/// * `ast_eid` - The ID of the expression in the AST arena.
+/// * `ast_arena` - The AST arena containing the expression.
+/// * `sym_arena` - The symbolic expression arena to translate into.
+/// * `var_map` - A map from variable IDs to their index in the symbolic arena.
+/// * `def_map` - A map from definition IDs to their expression ID in the AST arena.
+/// * `enum_map` - A map from enum IDs to their index and size in the symbolic arena.
+/// * `stack` - A stack of variable IDs to detect circular definitions.
+///
+/// # Returns
+///
+/// The ID of the translated symbolic expression.
 fn translate_expr(
     ast_eid: ExprID,
     ast_arena: &SsmvArena,

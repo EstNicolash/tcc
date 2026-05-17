@@ -1,3 +1,12 @@
+//! # Module `bdd_compiler`
+//!
+//! This module provides utilities for compiling a model to a BDD.
+//!
+//! # Public Functions
+//!
+//! * [`compile_model_to_bdd`] - Compiles the model to a BDD.
+//!
+
 use crate::core::bdd::{
     SymbolicContext, bdd_number_eq, bdd_number_gt, bdd_number_gte, bdd_number_lt, bdd_number_lte,
     bdd_number_neq, bdd_number_sub, ripple_carry_adder,
@@ -7,11 +16,19 @@ use crate::modeling::symbolic::{BinaryOp, Model, SymbolicExpr, SymbolicExprID, U
 use oxidd::bdd::BDDFunction;
 use oxidd::{BooleanFunction, ManagerRef};
 
+/// Compiles the model to a BDD
+///
+/// # Arguments
+///
+/// * `model` - The model to compile.
+/// * `explicit_order` - The explicit order of variables, if any.
+///
+/// # Returns
+///
+/// The compiled symbolic context.
 pub fn compile_model_to_bdd(model: &Model, explicit_order: Option<Vec<String>>) -> SymbolicContext {
-    // Create the symbolic context and allocate variables
     let mut symbolic_ctx = SymbolicContext::new(model, explicit_order);
 
-    // Compile the initial states
     compile_initial_states(model, &mut symbolic_ctx);
 
     compile_transition_relation(model, &mut symbolic_ctx);

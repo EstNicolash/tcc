@@ -1,3 +1,9 @@
+//! # Module `expansion`
+//! This module expands a symbolic model into an explicit Kripke structure.
+//!
+//! # Public Functions
+//! - `expand_to_kripke` — Expands a symbolic model into an explicit Kripke structure.
+
 use crate::core::kripke_structure::{KripkeBuilder, KripkeStructure, StateID};
 use crate::modeling::symbolic::{
     BinaryOp, Domain, Model, SymbolicArena, SymbolicExpr, SymbolicExprID, UnaryOp, Value,
@@ -5,11 +11,12 @@ use crate::modeling::symbolic::{
 use std::collections::{HashMap, HashSet, VecDeque};
 
 type State = Vec<i32>;
-
+/// Returns `true` if the value is non-zero, `false` otherwise.
 fn is_true(v: i32) -> bool {
     v != 0
 }
 
+/// Converts a boolean to the `i32` format used in states.
 fn from_bool(b: bool) -> i32 {
     if b { 1 } else { 0 }
 }
@@ -23,6 +30,7 @@ fn value_to_i32(v: &Value) -> i32 {
     }
 }
 
+/// Expands a symbolic model into an explicit Kripke structure.
 pub fn expand_to_kripke(model: &Model) -> KripkeStructure {
     let num_vars = model.variables.len();
     let mut builder = KripkeBuilder::new(num_vars);
@@ -59,6 +67,7 @@ pub fn expand_to_kripke(model: &Model) -> KripkeStructure {
         }
     }
 
+    // Convert the intermediate builder state into a Kripke structure
     KripkeStructure::from_builder(builder)
 }
 
@@ -135,6 +144,17 @@ pub fn eval(expr_id: SymbolicExprID, state: &[i32], model: &Model) -> Vec<i32> {
     }
 }
 
+/// Computes the initial states of the Kripke structure.
+///
+/// Initial states are computed by evaluating the initial assignments of the model.
+///
+/// # Arguments
+///
+/// * `model` - The model to compute initial states for.
+///
+/// # Returns
+///
+/// A vector of initial states.
 fn compute_initial_states(model: &Model) -> Vec<State> {
     let init_map: HashMap<usize, SymbolicExprID> = model
         .init_assignments
@@ -173,6 +193,18 @@ fn compute_initial_states(model: &Model) -> Vec<State> {
     cartesian_product(&values_per_var)
 }
 
+/// Computes the next states of the Kripke structure.
+///
+/// Next states are computed by evaluating the next assignments of the model.
+///
+/// # Arguments
+///
+/// * `model` - The model to compute next states for.
+/// * `state` - The current state to compute next states from.
+///
+/// # Returns
+///
+/// A vector of next states.
 fn compute_next_states(model: &Model, state: &[i32]) -> Vec<State> {
     let next_map: HashMap<usize, SymbolicExprID> = model
         .next_assignments
@@ -187,6 +219,7 @@ fn compute_next_states(model: &Model, state: &[i32]) -> Vec<State> {
             // With next: evaluate next expression
             values_per_var.push(eval(expr_id, state, model));
         } else {
+            // Without next: use domain values (non-deterministic)
             values_per_var.push(get_domain_values(&var.domain));
         }
     }
@@ -219,7 +252,7 @@ fn expr_contains_reference(expr_id: SymbolicExprID, arena: &SymbolicArena) -> bo
             .any(|i| expr_contains_reference(arena.set_buffer[*start as usize + i], arena)),
     }
 }
-
+/// Returns the domain values for a given domain.
 fn get_domain_values(domain: &Domain) -> Vec<i32> {
     match domain {
         Domain::Boolean => vec![0, 1],
