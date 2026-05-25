@@ -82,7 +82,10 @@ impl SymbolicContext {
                 let bit_count = match &var.domain {
                     Domain::Boolean => 1,
                     Domain::Enum(ids) => calc_bits(ids.len()),
-                    Domain::Range { min, max } => calc_bits((max - min + 1) as usize),
+                    Domain::Range { min, max } => {
+                        let max_val = if *max > 0 { *max as usize } else { 0 };
+                        calc_bits(max_val + 1)
+                    }
                 };
 
                 // Initialize with u32::MAX to track which bits are still unassigned
@@ -204,6 +207,27 @@ pub fn calc_bits(domain_size: usize) -> usize {
     }
 }
 
+fn pad_to_max(
+    lhs: &[BDDFunction],
+    rhs: &[BDDFunction],
+    manager: &BDDManagerRef,
+) -> (Vec<BDDFunction>, Vec<BDDFunction>) {
+    let max_len = std::cmp::max(lhs.len(), rhs.len());
+    let mut new_lhs = lhs.to_vec();
+    let mut new_rhs = rhs.to_vec();
+
+    if new_lhs.len() < max_len {
+        let f_node = manager.with_manager_shared(|m| BDDFunction::f(m));
+        new_lhs.resize(max_len, f_node);
+    }
+    if new_rhs.len() < max_len {
+        let f_node = manager.with_manager_shared(|m| BDDFunction::f(m));
+        new_rhs.resize(max_len, f_node);
+    }
+
+    (new_lhs, new_rhs)
+}
+
 /// Full Adder: Returns the bitwise sum of two numbers using a full adder
 ///
 /// # Arguments
@@ -245,18 +269,15 @@ pub fn ripple_carry_adder(
     rhs: &[BDDFunction],
     manager: &BDDManagerRef,
 ) -> Vec<BDDFunction> {
-    let mut result_bits = Vec::with_capacity(lhs.len());
-
+    let (padded_lhs, padded_rhs) = pad_to_max(lhs, rhs, manager);
+    let mut result_bits = Vec::with_capacity(padded_lhs.len());
     let mut current_carry = manager.with_manager_shared(|m| BDDFunction::f(m));
 
-    for i in 0..lhs.len() {
-        let (sum_bit, next_carry) = bdd_full_adder(&lhs[i], &rhs[i], &current_carry);
-
+    for i in 0..padded_lhs.len() {
+        let (sum_bit, next_carry) = bdd_full_adder(&padded_lhs[i], &padded_rhs[i], &current_carry);
         result_bits.push(sum_bit);
-
         current_carry = next_carry;
     }
-
     result_bits
 }
 
@@ -275,14 +296,13 @@ pub fn bdd_number_eq(
     rhs: &[BDDFunction],
     manager: &BDDManagerRef,
 ) -> BDDFunction {
+    let (padded_lhs, padded_rhs) = pad_to_max(lhs, rhs, manager);
     let mut result = manager.with_manager_shared(|m| BDDFunction::t(m));
 
-    for (l, r) in lhs.iter().zip(rhs.iter()) {
+    for (l, r) in padded_lhs.iter().zip(padded_rhs.iter()) {
         let bit_equal = l.equiv(r);
-
         result = result.and(&bit_equal.unwrap()).unwrap();
     }
-
     result
 }
 /// Subtract (A - B): Returns the bitwise subtraction of B from A
@@ -300,24 +320,20 @@ pub fn bdd_number_sub(
     rhs: &[BDDFunction],
     manager: &BDDManagerRef,
 ) -> Vec<BDDFunction> {
-    let mut result_bits = Vec::with_capacity(lhs.len());
-
+    let (padded_lhs, padded_rhs) = pad_to_max(lhs, rhs, manager);
+    let mut result_bits = Vec::with_capacity(padded_lhs.len());
     let mut current_carry = manager.with_manager_shared(|m| BDDFunction::t(m));
 
-    for i in 0..lhs.len() {
+    for i in 0..padded_lhs.len() {
         // Invert the bit of the right-hand side (NOT B)
-        let not_b = rhs[i].not().unwrap();
-
+        let not_b = padded_rhs[i].not().unwrap();
         // Add A + (NOT B) + 1
-        let (sum_bit, next_carry) = bdd_full_adder(&lhs[i], &not_b, &current_carry);
-
+        let (sum_bit, next_carry) = bdd_full_adder(&padded_lhs[i], &not_b, &current_carry);
         result_bits.push(sum_bit);
         current_carry = next_carry;
     }
-
     result_bits
 }
-
 /// Greater Than (A > B): Returns True if A is strictly greater than B
 ///
 /// # Arguments
@@ -333,21 +349,20 @@ pub fn bdd_number_gt(
     rhs: &[BDDFunction],
     manager: &BDDManagerRef,
 ) -> BDDFunction {
+    let (padded_lhs, padded_rhs) = pad_to_max(lhs, rhs, manager);
+
     // Start with False (if numbers are identical, A is not strictly greater than B)
     let mut is_gt = manager.with_manager_shared(|m| BDDFunction::f(m));
 
-    for i in 0..lhs.len() {
-        let a_gt_b_here = rhs[i].imp_strict(&lhs[i]).unwrap();
+    for i in 0..padded_lhs.len() {
+        let a_gt_b_here = padded_rhs[i].imp_strict(&padded_lhs[i]).unwrap();
         // Condition 2: A and B are equal at this bit
-        let a_eq_b_here = lhs[i].equiv(&rhs[i]).unwrap();
-
+        let a_eq_b_here = padded_lhs[i].equiv(&padded_rhs[i]).unwrap();
         // If they are equal here, the result depends on the lower bits evaluated so far
         let eq_and_prev_gt = a_eq_b_here.and(&is_gt).unwrap();
-
         // The final result for this stage
         is_gt = a_gt_b_here.or(&eq_and_prev_gt).unwrap();
     }
-
     is_gt
 }
 
