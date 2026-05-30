@@ -1,8 +1,13 @@
 *.csv
 *.nusmv
 *.smv
+*.txt
+*.ord
 
 /target/
+raw/
+data/data
+__pycache__
 
 .direnv/
 result
