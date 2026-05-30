@@ -52,6 +52,7 @@
             "rust-analyzer"
           ];
         };
+
       in
       {
         devShells.default = pkgs.mkShell {
@@ -70,7 +71,14 @@
 
           shellHook = ''
             echo "--- Model Checker Dev Environment ---"
-            echo "nuXmv $(nuXmv --version | head -n 1) available."
+
+            export PATH="$PWD/target/release:$PATH"
+
+            echo ">> Your local target/release binary is now bound to \$PATH."
+            echo ">> Execute 'cargo build --release' once to initialize/update the bin."
+            echo ">> You can now call 'checker' globally within this shell."
+
+            echo "nuXmv environment configured successfully."
             cargo --version
           '';
         };
