@@ -212,7 +212,7 @@ fn sat(
             .with_manager_shared(|m| BDDFunction::f(m))),
 
         CtlFormula::Prop(sym_expr_id) => {
-            let bdd_expr_vec = eval_expr(symbolic_ctx, *sym_expr_id, model);
+            let bdd_expr_vec = eval_expr(symbolic_ctx, *sym_expr_id, model, 1);
             bdd_expr_vec
                 .into_iter()
                 .next()

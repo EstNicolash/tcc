@@ -206,7 +206,6 @@ pub fn calc_bits(domain_size: usize) -> usize {
         (domain_size as f64).log2().ceil() as usize
     }
 }
-
 fn pad_to_max(
     lhs: &[BDDFunction],
     rhs: &[BDDFunction],
@@ -216,13 +215,15 @@ fn pad_to_max(
     let mut new_lhs = lhs.to_vec();
     let mut new_rhs = rhs.to_vec();
 
-    if new_lhs.len() < max_len {
+    if new_lhs.len() < max_len || new_rhs.len() < max_len {
         let f_node = manager.with_manager_shared(|m| BDDFunction::f(m));
-        new_lhs.resize(max_len, f_node);
-    }
-    if new_rhs.len() < max_len {
-        let f_node = manager.with_manager_shared(|m| BDDFunction::f(m));
-        new_rhs.resize(max_len, f_node);
+
+        if new_lhs.len() < max_len {
+            new_lhs.resize(max_len, f_node.clone());
+        }
+        if new_rhs.len() < max_len {
+            new_rhs.resize(max_len, f_node);
+        }
     }
 
     (new_lhs, new_rhs)
