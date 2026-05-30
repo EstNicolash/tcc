@@ -11,6 +11,14 @@ pub struct Cli {
     pub verbose: bool,
 }
 
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ExportOrderMode {
+    #[default]
+    None,
+    VerifyAndExport,
+    ExportOnly,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     Verify {
@@ -30,6 +38,10 @@ pub enum Commands {
         /// Algorithm to use for verification
         #[arg(short, long, value_enum, default_value_t = Algorithm::Bdd)]
         algorithm: Algorithm,
+
+        /// Export the computed variable ordering to an .ord file for NuSMV compatibility
+        #[arg(long, value_enum, default_value_t = ExportOrderMode::None)]
+        export_order: ExportOrderMode,
     },
 
     TestParser {

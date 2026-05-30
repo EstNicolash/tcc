@@ -9,14 +9,15 @@ use crate::io::read_order_file::read_order_file;
 use crate::modeling::expansion;
 use crate::modeling::ordering::{OrderingStrategy, compute_ordering};
 use clap::Parser;
-use cli::{Algorithm, Cli, Commands, InputFormat, OrderInput};
+use cli::{Algorithm, Cli, Commands, ExportOrderMode, InputFormat, OrderInput};
 use colored::*;
 use memory_stats::memory_stats;
 use oxidd::{Manager, ManagerRef};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::Path;
 use std::process;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant}; // Necessário para usar Path::new
 
 /// Structure to hold benchmark data for CSV export
 struct BenchmarkRecord {
@@ -56,8 +57,16 @@ fn main() {
             order,
             format,
             algorithm,
+            export_order,
         } => {
-            run_verification(model_path, spec_path, order, format, algorithm);
+            run_verification(
+                model_path,
+                spec_path,
+                order,
+                format,
+                algorithm,
+                export_order,
+            );
         }
         Commands::TestParser { input_file, output } => {
             run_parser_test(input_file, output);
@@ -71,6 +80,7 @@ fn run_verification(
     order: Option<OrderInput>,
     format: InputFormat,
     algorithm: Algorithm,
+    export_order: ExportOrderMode,
 ) {
     println!(
         "{}",
@@ -148,7 +158,7 @@ fn run_verification(
 
             let compile_start = Instant::now();
             let symbolic_ctx =
-                modeling::bdd_compiler::compile_model_to_bdd(&symbolic_model, static_order);
+                modeling::bdd_compiler::compile_model_to_bdd(&symbolic_model, static_order.clone());
 
             // Collect BDD node count from OxiDD Manager
             record.static_nodes = symbolic_ctx
@@ -156,6 +166,46 @@ fn run_verification(
                 .with_manager_shared(|m| m.num_inner_nodes());
             record.compilation_time_ms = compile_start.elapsed().as_millis();
             print_milestone("BDD Compilation", compile_start.elapsed());
+
+            // -- Export variable ordering to .ord file
+            if export_order == ExportOrderMode::ExportOnly {
+                let final_var_ordering: Vec<String> = match &static_order {
+                    Some(order_vector) => order_vector.clone(),
+                    None => compute_ordering(&symbolic_model, OrderingStrategy::Default),
+                };
+
+                let file_stem = Path::new(&model_path)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("model");
+
+                let ord_file_name = format!("ord_{}.ord", file_stem);
+                let ord_content = final_var_ordering.join("\n");
+
+                match fs::write(&ord_file_name, ord_content) {
+                    Ok(_) => {
+                        println!(
+                            "{} Variable ordering successfully exported to {}",
+                            "✔".green(),
+                            ord_file_name
+                        );
+                        println!(
+                            "{} Mode [export-only] active. Halting execution smoothly.",
+                            "ℹ".blue()
+                        );
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "{} Failed to write order file: {}",
+                            "Error:".red().bold(),
+                            e
+                        );
+                        std::process::exit(1);
+                    }
+                }
+            }
+            // ───────────────────────────────────────────────
 
             let results = algorithms::bdd_fixpoint::verify(&symbolic_ctx, symbolic_model)
                 .unwrap_or_else(|e| {
