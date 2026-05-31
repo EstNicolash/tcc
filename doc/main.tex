@@ -4,16 +4,16 @@
 \usepackage{graphicx}
 \usepackage{booktabs} 
 \usepackage{amsmath} 
-%\usepackage{amssymb, amsthm} % Removido para evitar conflito com newtxmath da classe
+%\usepackage{amssymb, amsthm} 
 \usepackage{hyperref}
 
-% --- Pacotes para Algoritmos e Código (Adicionados) ---
+
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{listings}
 \usepackage{xcolor}
 
-% Configuração para código (Rust/SMV)
+
 \lstset{
 	basicstyle=\ttfamily\small,
 	keywordstyle=\color{blue},
@@ -24,11 +24,11 @@
 	captionpos=b
 }
 
-% --- Pacote para Desenhar BDDs (TikZ e bibliotecas) ---
+
 \usepackage{tikz}
 \usetikzlibrary{arrows,positioning,shapes}
 
-% --- Comandos Personalizados ---
+
 \newcommand{\sat}[1]{\text{Sat}(#1)}
 \newcommand{\ex}{\text{EX}}
 \newcommand{\eu}{\text{EU}}
@@ -44,12 +44,8 @@
 
 \date{Maio}{2026}
 
-\keyword{Verificação Formal}
-\keyword{BDDs}
-\keyword{Rust}
-\translatedkeyword{Formal Verification}
-\translatedkeyword{BDDs}
-\translatedkeyword{Rust}
+\keyword{Verificação de Modelos}
+\translatedkeyword{Model Checking}
 
 \begin{document}
 	

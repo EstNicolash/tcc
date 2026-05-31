@@ -67,7 +67,7 @@ impl SymbolicContext {
     /// The variables are ordered by their index in the model.
     /// Each model variable is mapped to two BDD variable, one for the current state and one for the next state.
     pub fn new(model: &Model, explicit_order: Option<Vec<String>>) -> Self {
-        let manager = oxidd::bdd::new_manager(40_000_000, 1_000_000, 1);
+        let manager = oxidd::bdd::new_manager(100_000_000, 1_000_000, 1);
 
         let mut var_map: Vec<VarBits> = (0..model.variables.len())
             .map(|_| VarBits {

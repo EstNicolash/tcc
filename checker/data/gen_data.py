@@ -15,21 +15,22 @@ import importlib
 
 TARGET_OUTPUT_DIR = "raw"
 
-# Dict structure: "problem_tag": ("python_module_name", [list_of_explicit_N_values])
 BENCHMARK_MATRIX = {
-    "coi_killer": ("coi_killer", [2, 4, 8, 16, 24, 32, 48, 64, 96, 128]),
-    "bad_order": ("bad_order", [5, 10, 20, 40, 60, 80, 100, 116, 122, 127]),
-    "counter": ("counter", [2, 4, 8, 12, 16, 20, 22, 24, 25, 26]),
-    "rule30": ("rule30", [3, 6, 12, 18, 24, 30, 36, 39, 42, 47]),
-    "brp2": ("brp2", [3, 6, 12, 24, 36, 48, 60, 72, 78, 83]),
-    "dining": ("dining", [2, 4, 8, 12, 16, 24, 32, 40, 44, 46]),
-    "elevator2": ("elevator2", [3, 4, 6, 8, 9, 10, 12, 15, 18, 19]),
+    "coi_killer": ("coi_killer", [2, 4, 8, 16, 32, 48, 64, 80, 96, 112, 128]),
+    "coi_chaos_killer": ("coi_chaos_killer", [4, 8, 16, 32, 48, 64, 80, 96, 112, 128]),
+    "bad_order": ("bad_order", [5, 15, 30, 60, 90, 104, 112, 118, 122, 125, 127]),
+    "counter": ("counter", [2, 4, 8, 12, 16, 18, 20, 22, 24, 25, 26]),
+    "rule30": ("rule30", [3, 6, 12, 18, 24, 30, 36, 39, 41, 44, 47]),
+    "brp2": ("brp2", [3, 6, 12, 24, 36, 48, 60, 72, 76, 80, 83]),
+    "dining": ("dining", [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]),
+    "elevator2": ("elevator2", [3, 6, 9, 10, 12, 14, 16, 17, 18, 19]),
+    "firewire_link": ("firewire_link", [2, 4, 8, 16, 24, 32, 34, 36, 37, 38, 39]),
+
     "fischer": ("fischer", [3, 4, 5, 6, 7, 8]),
-    "firewire_link": ("firewire_link", [2, 4, 8, 12, 16, 24, 32, 36, 38, 39]),
+    "synapse": ("synapse", [3, 4, 5, 6, 7, 8]),
+    "train_gate": ("train_gate", [3, 4, 5, 6, 7, 8, 9]),
     "mcs": ("mcs", [3, 4, 5]),
     "bakery": ("bakery", [2, 3, 4]),
-    "train_gate": ("train_gate", [3, 4, 5, 6, 7, 8, 9]),
-    "synapse": ("synapse", [3, 4, 5, 6, 7, 8]),
     "sokoban": ("sokoban", [2, 3, 4, 5])
 }
 

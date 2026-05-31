@@ -1,31 +1,39 @@
+#!/usr/bin/env python3
+"""
+run_experiments_suite.py
+================================================================================
+Advanced Benchmarking Framework for Hardware Model Checking Paradigms.
+
+Features:
+  - Adaptive Saturation Shortcutting: Prunes future N values if an engine fails.
+  - Dynamic seed scaling inside the sample loop for random heuristics.
+  - Native CLI flag injection (-dynamic) for NuSMV to prevent shell deadlocks.
+  - Asymmetric non-linear cross-killing engine for BDD solvers.
+"""
+
 import os
-import subprocess
+import sys
 import re
 import csv
+import math
+import time
+import argparse
+import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import List, Dict, Any, Optional, Tuple, Set
 
-PROJECT_ROOT = Path(__file__).parent.parent
-EXAMPLES_DIR = PROJECT_ROOT / "examples"
-CHECKER_BIN = PROJECT_ROOT / "target" / "release" / "checker"
+# ─── ENVIRONMENT DISCOVERIES ──────────────────────────────────────────────────
+PROJECT_ROOT = Path(__file__).parent.absolute() if Path(__file__).parent.name != "benchmark" else Path(__file__).parent.parent.absolute()
+EXAMPLES_DIR = PROJECT_ROOT / "data" / "raw"
 BENCHMARK_DIR = PROJECT_ROOT / "benchmark"
-
+CHECKER_BIN = "checker"
 TIMEOUT_LIMIT = 60
-
-INSTANCES = [
-    "dining_8.smv",
-    "dining_10.smv",
-    "dining_12.smv",
-    "dining_14.smv",
-]
-
-CHECKER_ALGORITHMS = ["bdd", "labelling-scc"]
 
 NUSMV_TEMPLATE = """
 set default_trace_plugin 0
 set cone_of_influence
 set bdd_static_order_heuristics none
-set vars_order_type topological
 read_model -i {model_path}
 flatten_hierarchy
 encode_variables
@@ -35,16 +43,22 @@ print_usage
 check_ctlspec
 echo "[MILESTONE 2]"
 print_usage
+{write_order_line}
 quit
 """
 
-def get_peak_mem(stderr_output):
-    """Extracts Maximum resident set size from 'time -v' output."""
+def NUSMV_TEMPLATE_EXEC(model_path: str, write_order_line: str) -> str:
+    return NUSMV_TEMPLATE.format(
+        model_path=model_path,
+        write_order_line=write_order_line
+    )
+
+# ─── HELPER EXTRACTION UTILITIES ──────────────────────────────────────────────
+def get_peak_mem_kb(stderr_output: str) -> int:
     match = re.search(r"Maximum resident set size \(kbytes\): (\d+)", stderr_output)
     return int(match.group(1)) if match else 0
 
-def parse_nusmv_output(stdout_output):
-    """Extracts timings and nodes from NuSMV's internal usage log."""
+def parse_nusmv_output(stdout_output: str) -> Optional[Dict[str, int]]:
     user_times = re.findall(r"User time\s+(\d+\.\d+)\s+seconds", stdout_output)
     nodes_allocated = re.findall(r"BDD nodes allocated:\s+(\d+)", stdout_output)
     if len(user_times) >= 2 and len(nodes_allocated) >= 2:
@@ -59,84 +73,387 @@ def parse_nusmv_output(stdout_output):
         }
     return None
 
-def run_benchmarks():
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    results_path = BENCHMARK_DIR / f"results_{timestamp}"
-    results_path.mkdir(parents=True, exist_ok=True)
+def extract_n_from_filename(filename: str) -> int:
+    match = re.search(r"_(\d+)\.smv$", filename)
+    return int(match.group(1)) if match else 0
 
-    csv_final_path = results_path / "final_benchmarks.csv"
+def compute_dynamic_timeout(leader_time: float) -> float:
+    if leader_time < 0.05:
+        return 5.0
+    return leader_time + 10.0 * math.sqrt(leader_time) + 5.0
+
+def safe_extract_metric(metrics_dict: Dict[str, Any], keys: List[str]) -> Any:
+    for key in keys:
+        if key in metrics_dict:
+            return metrics_dict[key]
+    return "-"
+
+# ─── PARALELISMO ASSÍNCRONO COM CROSS-KILLING ──────────────────────────────────
+def monitor_bdd_asymmetric_parallel(
+    cmd_checker: List[str],
+    cmd_nusmv: List[str],
+    temp_csv_path: Path,
+    checker_already_sated: bool,
+    nusmv_already_sated: bool,
+    nusmv_tag: str
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Roda os motores BDD em concorrência controlada, respeitando podas prévias."""
+    checker_res = {"status": "TIMEOUT", "total_ms": "-", "compile_ms": "-", "verify_ms": "-", "static_nodes": "-", "verification_nodes": "-", "peak_mem": 0, "states": 0}
+    nusmv_res = {"status": "TIMEOUT", "total_ms": "-", "compile_ms": "-", "verify_ms": "-", "static_nodes": "-", "verification_nodes": "-", "peak_mem": 0, "states": 0}
+
+    # Se AMBOS já saturaram no passado, nem abre os processos
+    if checker_already_sated and nusmv_already_sated:
+        checker_res["status"] = "TIMEOUT"
+        nusmv_res["status"] = "TIMEOUT"
+        return checker_res, nusmv_res
+
+    start_global = time.time()
+    p_checker = None
+    p_nusmv = None
+
+    # Inicialização condicional: Só dispara quem ainda está vivo na competição
+    if not checker_already_sated:
+        p_checker = subprocess.Popen(["time", "-v"] + cmd_checker, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, cwd=str(PROJECT_ROOT))
+    else:
+        checker_res["status"] = "TIMEOUT"
+
+    if not nusmv_already_sated:
+        p_nusmv = subprocess.Popen(["time", "-v"] + cmd_nusmv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=str(PROJECT_ROOT))
+    else:
+        nusmv_res["status"] = "TIMEOUT"
+
+    leader_time: Optional[float] = None
+    leader_engine: Optional[str] = None
+
+    while True:
+        elapsed = time.time() - start_global
+
+        if elapsed > TIMEOUT_LIMIT:
+            if p_checker and p_checker.poll() is None: p_checker.kill()
+            if p_nusmv and p_nusmv.poll() is None: p_nusmv.kill()
+            break
+
+        # Monitoriza o seu Checker (se ativo)
+        if p_checker and p_checker.poll() is not None and checker_res["status"] == "TIMEOUT":
+            duration = time.time() - start_global
+            _, stderr = p_checker.communicate()
+            checker_res["peak_mem"] = get_peak_mem_kb(stderr)
+
+            if p_checker.returncode == 0 and temp_csv_path.exists():
+                with open(temp_csv_path, 'r') as f:
+                    metrics = list(csv.DictReader(f))[-1]
+
+                checker_res.update({
+                    "status": "SUCCESS",
+                    "total_ms": safe_extract_metric(metrics, ['total_time_ms', 'total_ms']),
+                    "compile_ms": safe_extract_metric(metrics, ['compilation_time_ms', 'compile_ms']),
+                    "verify_ms": safe_extract_metric(metrics, ['verification_time_ms', 'verify_ms']),
+                    "static_nodes": safe_extract_metric(metrics, ['static_nodes', 'static_node_count']),
+                    "verification_nodes": safe_extract_metric(metrics, ['verification_nodes', 'verification_node_count']),
+                    "states": safe_extract_metric(metrics, ['explicit_states', 'states', 'states_explored'])
+                })
+                if leader_engine is None:
+                    leader_engine = "checker"
+                    leader_time = duration
+            else:
+                checker_res["status"] = "CRASH"
+
+        # Monitoriza o NuSMV (se ativo)
+        if p_nusmv and p_nusmv.poll() is not None and nusmv_res["status"] == "TIMEOUT":
+            duration = time.time() - start_global
+            stdout, stderr = p_nusmv.communicate()
+            nusmv_res["peak_mem"] = get_peak_mem_kb(stderr)
+            stats = parse_nusmv_output(stdout)
+
+            if stats:
+                nusmv_res.update({"status": "SUCCESS", "total_ms": stats['total_ms'], "compile_ms": stats['compile_ms'], "verify_ms": stats['verify_ms'], "static_nodes": stats['static_nodes'], "verification_nodes": stats['verification_nodes']})
+                if leader_engine is None:
+                    leader_engine = "nusmv"
+                    leader_time = duration
+            else:
+                nusmv_res["status"] = "CRASH"
+
+        # Corta o retardatário usando a janela não-linear baseada no líder
+        if leader_engine is not None and leader_time is not None:
+            max_window = compute_dynamic_timeout(leader_time)
+            if elapsed > max_window:
+                if p_checker and p_checker.poll() is None:
+                    p_checker.kill()
+                    checker_res["status"] = "STOPPED"
+                if p_nusmv and p_nusmv.poll() is None:
+                    p_nusmv.kill()
+                    nusmv_res["status"] = "STOPPED"
+                break
+
+        # Avalia condições de saída do loop de monitorização
+        checker_done = (p_checker is None) or (p_checker.poll() is not None)
+        nusmv_done = (p_nusmv is None) or (p_nusmv.poll() is not None)
+        if checker_done and nusmv_done:
+            break
+
+        time.sleep(0.05)
+
+    return checker_res, nusmv_res
+
+# ─── CORE PIPELINE ORCHESTRATOR ───────────────────────────────────────────────
+def execute_benchmark_suite(problem_name: str, heuristics: List[str], iterations: int, algorithms: List[str]):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    problem_results_dir = BENCHMARK_DIR / f"{problem_name}_results_{timestamp}"
+    problem_results_dir.mkdir(parents=True, exist_ok=True)
+
+    csv_output_path = problem_results_dir / f"benchmarks_{problem_name}.csv"
     headers = [
-        "model", "algorithm", "total_ms", "compile_ms", "verify_ms",
-        "static_nodes", "verification_nodes", "peak_mem_kb", "states"
+        "Problem", "N", "Heuristic", "Seed_Or_Iter", "Iteration", "Algorithm",
+        "Total_MS", "Compile_MS", "Verify_MS", "Static_Nodes", "Verification_Nodes",
+        "Peak_Mem_KB", "States_Explored", "Status"
     ]
 
-    all_data = []
+    all_files = os.listdir(EXAMPLES_DIR) if EXAMPLES_DIR.exists() else []
+    target_instances = [f for f in all_files if f.startswith(f"{problem_name}_") and f.endswith(".smv")]
+    target_instances.sort(key=extract_n_from_filename)
 
-    for model_name in INSTANCES:
-        smv_file = EXAMPLES_DIR / model_name
-        if not smv_file.exists():
-            print(f"File not found: {model_name}")
-            continue
+    if not target_instances:
+        print(f"❌ No matching generated models found for: '{problem_name}_N.smv' inside {EXAMPLES_DIR}")
+        return
 
-        print(f"\n>>> Processing Model: {model_name}")
+    print(f"🚀 Initializing Benchmark Engine for Problem Group: [{problem_name.upper()}]")
+    print(f"📂 Storing reports under: {problem_results_dir}")
 
-        for algo in CHECKER_ALGORITHMS:
-            try:
-                print(f"    Running SSMV-Checker with algorithm: {algo}...")
-                temp_csv = PROJECT_ROOT / "benchmarks.csv"
-                if temp_csv.exists(): os.remove(temp_csv)
-
-                cmd_checker = ["time", "-v", str(CHECKER_BIN), "verify", str(smv_file), "--algorithm", algo]
-
-                proc_c = subprocess.run(cmd_checker, capture_output=True, text=True, timeout=TIMEOUT_LIMIT)
-
-                peak_c = get_peak_mem(proc_c.stderr)
-
-                if proc_c.returncode == 0 and temp_csv.exists():
-                    with open(temp_csv, 'r') as f:
-                        row = list(csv.DictReader(f))[-1]
-                        all_data.append([
-                            model_name, f"SSMV-{algo.capitalize()}", row['total_ms'], row['compile_ms'],
-                            row['verify_ms'], row['static_nodes'], row['verification_nodes'], peak_c, row.get('states', 0)
-                        ])
-                else:
-                    all_data.append([model_name, f"SSMV-{algo.capitalize()}", "ERROR/OOM", "-", "-", "-", "-", peak_c, "-"])
-
-            except subprocess.TimeoutExpired:
-                print(f"    TIMEOUT: {algo} excedeu {TIMEOUT_LIMIT}s")
-                all_data.append([model_name, f"SSMV-{algo.capitalize()}", "TIMEOUT", "-", "-", "-", "-", "-", "-"])
-
-        try:
-            print(f"    Running NuSMV benchmark...")
-            nusmv_script = results_path / f"bench_{model_name}.nusmv"
-            with open(nusmv_script, 'w') as f:
-                f.write(NUSMV_TEMPLATE.format(model_path=str(smv_file)))
-
-            cmd_nusmv = ["time", "-v", "NuSMV", "-dcx", "-source", str(nusmv_script)]
-
-            proc_n = subprocess.run(cmd_nusmv, capture_output=True, text=True, timeout=TIMEOUT_LIMIT)
-
-            peak_n = get_peak_mem(proc_n.stderr)
-            stats_n = parse_nusmv_output(proc_n.stdout)
-
-            if stats_n:
-                all_data.append([
-                    model_name, "NuSMV", stats_n['total_ms'], stats_n['compile_ms'],
-                    stats_n['verify_ms'], stats_n['static_nodes'], stats_n['verification_nodes'], peak_n, 0
-                ])
-            else:
-                all_data.append([model_name, "NuSMV", "ERROR/OOM", "-", "-", "-", "-", peak_n, "-"])
-
-        except subprocess.TimeoutExpired:
-            print(f"    TIMEOUT: NuSMV excedeu {TIMEOUT_LIMIT}s")
-            all_data.append([model_name, "NuSMV", "TIMEOUT", "-", "-", "-", "-", "-", "-"])
-
-    with open(csv_final_path, 'w', newline='') as f:
-        writer = csv.writer(f)
+    with open(csv_output_path, mode='w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
         writer.writerow(headers)
-        writer.writerows(all_data)
 
-    print(f"\nDone! All results consolidated in: {results_path}")
+    # Rastreabilidade de Saturação: Isolada POR HEURÍSTICA
+    # Chaves guardadas: "SSMV-BDD", "NuSMV-DynamicSifting", "NuSMV-Standard", "NuSMV-StaticImport", "SSMV-LABELLING-SCC"
+    sated_algorithms: Dict[str, Set[str]] = {h: set() for h in heuristics}
 
+    for instance_file in target_instances:
+        n_val = extract_n_from_filename(instance_file)
+        model_full_path = EXAMPLES_DIR / instance_file
+        print(f"\n============ Analyzing Instance: {instance_file} (N = {n_val}) ============")
+
+        for heuristic in heuristics:
+            print(f"  💡 Variable Ordering Strategy: [{heuristic.upper()}]")
+
+            is_random_heuristic = heuristic.startswith("random") or heuristic == "random"
+
+            base_seed = 42
+            param_val = "-"
+            if heuristic.startswith("random:"):
+                base_seed = int(heuristic.split(":")[1])
+                param_val = str(base_seed)
+            elif heuristic.startswith("force:"):
+                param_val = heuristic.split(":")[1]
+
+            instance_stem = instance_file.replace(".smv", "")
+            shared_ord_file = PROJECT_ROOT / f"ord_{instance_stem}.ord"
+
+            if shared_ord_file.exists(): os.remove(shared_ord_file)
+            has_valid_order_file = False
+
+            # ─── ESTÁGIO DE PRÉ-GERAÇÃO DA ORDEM ───
+            # Só roda se o gerador principal ainda não saturou completamente nesta heurística
+            if not is_random_heuristic:
+                nusmv_tag = "NuSMV-DynamicSifting" if heuristic == "dynamic" else "NuSMV-Standard"
+                gen_sated = ("SSMV-BDD" in sated_algorithms[heuristic]) if (heuristic == "default" or heuristic.startswith("force")) else (nusmv_tag in sated_algorithms[heuristic])
+
+                if not gen_sated:
+                    if heuristic == "default" or heuristic.startswith("force"):
+                        cmd_gen = [CHECKER_BIN, "verify", str(model_full_path), "--order", heuristic, "--export-order", "export-only"]
+                        try:
+                            subprocess.run(cmd_gen, capture_output=True, text=True, timeout=30, cwd=str(PROJECT_ROOT))
+                            if shared_ord_file.exists():
+                                has_valid_order_file = True
+                        except Exception as e:
+                            print(f"    ⚠️ Failed to pre-generate ordering vector: {e}")
+
+                    elif heuristic == "dynamic":
+                        script_sift_path = problem_results_dir / f"tmp_sift_{instance_file}.nusmv"
+                        with open(script_sift_path, 'w') as sf:
+                            sf.write(NUSMV_TEMPLATE_EXEC(model_path=str(model_full_path), write_order_line=f"write_order -o {shared_ord_file}"))
+
+                        cmd_sift = ["NuSMV", "-dynamic", "-dcx", "-mono", "-coi", "-source", str(script_sift_path)]
+                        try:
+                            subprocess.run(cmd_sift, capture_output=True, text=True, timeout=TIMEOUT_LIMIT, cwd=str(PROJECT_ROOT))
+                            if shared_ord_file.exists():
+                                has_valid_order_file = True
+                                print(f"    ✅ Intercepted NuSMV Dynamic Sifting order matrix: {shared_ord_file.name}")
+                        except Exception as e:
+                            print(f"    ⚠️ NuSMV order interception stalled: {e}")
+                        finally:
+                            if script_sift_path.exists(): os.remove(script_sift_path)
+
+            # ─── BATERIA DE ITERAÇÕES (MÚLTIPLAS AMOSTRAS) ───
+            for current_iter in range(1, iterations + 1):
+                print(f"    🔄 Sample Loop [{current_iter}/{iterations}]")
+                rows_to_append = []
+
+                # Geração de ordem dinâmica para instâncias randómicas (com sementes progressivas)
+                if is_random_heuristic and ("SSMV-BDD" not in sated_algorithms[heuristic]):
+                    current_seed = base_seed + current_iter
+                    param_val = str(current_seed)
+                    heuristic_arg = f"random:{current_seed}"
+
+                    if shared_ord_file.exists(): os.remove(shared_ord_file)
+                    has_valid_order_file = False
+
+                    cmd_gen = [CHECKER_BIN, "verify", str(model_full_path), "--order", heuristic_arg, "--export-order", "export-only"]
+                    try:
+                        res = subprocess.run(cmd_gen, capture_output=True, text=True, timeout=30, cwd=str(PROJECT_ROOT))
+                        if shared_ord_file.exists():
+                            has_valid_order_file = True
+                        else:
+                            if res.returncode == 0 and len(res.stdout.strip()) > 0:
+                                lines = [line.strip() for line in res.stdout.split('\n') if line.strip() and not "Using" in line and not "Variable" in line]
+                                if lines:
+                                    with open(shared_ord_file, "w") as f_ord:
+                                        f_ord.write("\n".join(lines))
+                                    has_valid_order_file = True
+                    except Exception as e:
+                        print(f"        ⚠️ Failed to generate random order for loop sample {current_iter}: {e}")
+
+                # --- PARADIGMA 1: MOTORES DE BDD (VERIFICADOR VS NuSMV CO-PROCESSO) ---
+                if "bdd" in algorithms:
+                    nusmv_tag = "NuSMV-DynamicSifting" if heuristic == "dynamic" else "NuSMV-Standard"
+
+                    c_sated = "SSMV-BDD" in sated_algorithms[heuristic]
+                    n_sated = nusmv_tag in sated_algorithms[heuristic]
+
+                    # Constrói comandos de execução
+                    cmd_checker = [CHECKER_BIN, "verify", str(model_full_path), "--algorithm", "bdd"]
+                    cmd_checker += ["--order", f"file:{shared_ord_file}"] if has_valid_order_file else ["--order", "default"]
+
+                    script_runner_path = problem_results_dir / f"run_BDD_parallel_{instance_file}.nusmv"
+                    with open(script_runner_path, 'w') as rf:
+                        rf.write(NUSMV_TEMPLATE_EXEC(model_path=str(model_full_path), write_order_line=""))
+
+                    cmd_nusmv = ["NuSMV", "-dcx", "-mono", "-coi"]
+                    if heuristic == "dynamic": cmd_nusmv.append("-dynamic")
+                    elif has_valid_order_file and shared_ord_file.exists(): cmd_nusmv += ["-i", str(shared_ord_file)]
+                    cmd_nusmv += ["-source", str(script_runner_path)]
+
+                    temp_csv = PROJECT_ROOT / "benchmarks.csv"
+                    if temp_csv.exists(): os.remove(temp_csv)
+
+                    # Executa a monitorização concorrente com injeção de estado prévio de saturação
+                    c_res, n_res = monitor_bdd_asymmetric_parallel(cmd_checker, cmd_nusmv, temp_csv, c_sated, n_sated, nusmv_tag)
+
+                    # Verifica se houve gatilho de saturação nesta iteração e ativa a poda definitiva
+                    if c_res["status"] in ["TIMEOUT", "STOPPED", "CRASH"] and not c_sated:
+                        print(f"    [SATURATION ALERT] Engine [SSMV-BDD] sated at N={n_val}. Pruning future entries.")
+                        sated_algorithms[heuristic].add("SSMV-BDD")
+                    if n_res["status"] in ["TIMEOUT", "STOPPED", "CRASH"] and not n_sated:
+                        print(f"    [SATURATION ALERT] Engine [{nusmv_tag}] sated at N={n_val}. Pruning future entries.")
+                        sated_algorithms[heuristic].add(nusmv_tag)
+
+                    rows_to_append.append([
+                        problem_name, n_val, heuristic, param_val, current_iter, "SSMV-BDD",
+                        c_res["total_ms"], c_res["compile_ms"], c_res["verify_ms"], c_res["static_nodes"], c_res["verification_nodes"], c_res["peak_mem"], c_res["states"], c_res["status"]
+                    ])
+                    rows_to_append.append([
+                        problem_name, n_val, heuristic, param_val, current_iter, nusmv_tag,
+                        n_res["total_ms"], n_res["compile_ms"], n_res["verify_ms"], n_res["static_nodes"], n_res["verification_nodes"], n_res["peak_mem"], 0, n_res["status"]
+                    ])
+
+                    if script_runner_path.exists(): os.remove(script_runner_path)
+
+                    # ITEM ADICIONAL 2: Variante NuSMV-StaticImport isolada (Só roda se o sifting tiver completado com sucesso)
+                    if heuristic == "dynamic":
+                        si_sated = "NuSMV-StaticImport" in sated_algorithms[heuristic]
+                        if not si_sated and n_res["status"] == "SUCCESS" and shared_ord_file.exists():
+                            script_static_path = problem_results_dir / f"run_NuSMV_StaticImport_{instance_file}.nusmv"
+                            with open(script_static_path, 'w') as rf:
+                                rf.write(NUSMV_TEMPLATE_EXEC(model_path=str(model_full_path), write_order_line=""))
+
+                            cmd_nusmv_static = ["time", "-v", "NuSMV", "-dcx", "-mono", "-coi", "-i", str(shared_ord_file), "-source", str(script_static_path)]
+                            try:
+                                proc_st = subprocess.run(cmd_nusmv_static, capture_output=True, text=True, timeout=TIMEOUT_LIMIT, cwd=str(PROJECT_ROOT))
+                                st_peak = get_peak_mem_kb(proc_st.stderr)
+                                st_stats = parse_nusmv_output(proc_st.stdout)
+                                if st_stats:
+                                    rows_to_append.append([
+                                        problem_name, n_val, heuristic, param_val, current_iter, "NuSMV-StaticImport",
+                                        st_stats['total_ms'], st_stats['compile_ms'], st_stats['verify_ms'], st_stats['static_nodes'], st_stats['verification_nodes'], st_peak, 0, "SUCCESS"
+                                    ])
+                                else:
+                                    rows_to_append.append([problem_name, n_val, heuristic, param_val, current_iter, "NuSMV-StaticImport", "ERROR", "-", "-", "-", "-", st_peak, 0, "CRASH"])
+                                    sated_algorithms[heuristic].add("NuSMV-StaticImport")
+                            except subprocess.TimeoutExpired:
+                                rows_to_append.append([problem_name, n_val, heuristic, param_val, current_iter, "NuSMV-StaticImport", "TIMEOUT", "-", "-", "-", "-", "-", 0, "TIMEOUT"])
+                                sated_algorithms[heuristic].add("NuSMV-StaticImport")
+                            finally:
+                                if script_static_path.exists(): os.remove(script_static_path)
+                        else:
+                            # Se pulou ou já saturou anteriormente, joga TIMEOUT no log
+                            rows_to_append.append([problem_name, n_val, heuristic, param_val, current_iter, "NuSMV-StaticImport", "TIMEOUT", "-", "-", "-", "-", "-", 0, "TIMEOUT"])
+
+                # --- PARADIGMA 2: LABELLING-SCC GRAPH ISOLATION ---
+                if "labelling-scc" in algorithms:
+                    exp_sated = "SSMV-LABELLING-SCC" in sated_algorithms[heuristic]
+
+                    if not exp_sated:
+                        cmd_explicit = ["time", "-v", CHECKER_BIN, "verify", str(model_full_path), "--algorithm", "labelling-scc"]
+                        temp_csv = PROJECT_ROOT / "benchmarks.csv"
+                        if temp_csv.exists(): os.remove(temp_csv)
+
+                        try:
+                            proc_exp = subprocess.run(cmd_explicit, capture_output=True, text=True, timeout=TIMEOUT_LIMIT, cwd=str(PROJECT_ROOT))
+                            peak_mem = get_peak_mem_kb(proc_exp.stderr)
+
+                            if proc_exp.returncode == 0 and temp_csv.exists():
+                                with open(temp_csv, 'r') as f:
+                                    metrics = list(csv.DictReader(f))[-1]
+
+                                total = safe_extract_metric(metrics, ['total_time_ms', 'total_ms'])
+                                comp = safe_extract_metric(metrics, ['compilation_time_ms', 'compile_ms'])
+                                verif = safe_extract_metric(metrics, ['verification_time_ms', 'verify_ms'])
+                                s_nodes = safe_extract_metric(metrics, ['static_nodes', 'static_node_count'])
+                                v_nodes = safe_extract_metric(metrics, ['verification_nodes', 'verification_node_count'])
+                                states = safe_extract_metric(metrics, ['explicit_states', 'states', 'states_explored'])
+
+                                rows_to_append.append([
+                                    problem_name, n_val, heuristic, param_val, current_iter, "SSMV-LABELLING-SCC",
+                                    total, comp, verif, s_nodes, v_nodes, peak_mem, states, "SUCCESS"
+                                ])
+                            else:
+                                rows_to_append.append([problem_name, n_val, heuristic, param_val, current_iter, "SSMV-LABELLING-SCC", "ERROR", "-", "-", "-", "-", peak_mem, "-", "CRASH"])
+                                print(f"    [SATURATION ALERT] Engine [SSMV-LABELLING-SCC] crashed at N={n_val}. Pruning future entries.")
+                                sated_algorithms[heuristic].add("SSMV-LABELLING-SCC")
+                        except subprocess.TimeoutExpired:
+                            rows_to_append.append([problem_name, n_val, heuristic, param_val, current_iter, "SSMV-LABELLING-SCC", "TIMEOUT", "-", "-", "-", "-", "-", "-", "TIMEOUT"])
+                            print(f"    [SATURATION ALERT] Engine [SSMV-LABELLING-SCC] timed out at N={n_val}. Pruning future entries.")
+                            sated_algorithms[heuristic].add("SSMV-LABELLING-SCC")
+                        finally:
+                            if temp_csv.exists(): os.remove(temp_csv)
+                    else:
+                        # Se já saturou em execuções de N anteriores, joga o TIMEOUT de forma instantânea sem gastar CPU
+                        rows_to_append.append([problem_name, n_val, heuristic, param_val, current_iter, "SSMV-LABELLING-SCC", "TIMEOUT", "-", "-", "-", "-", "-", "-", "TIMEOUT"])
+
+                # Gravação imediata do bloco de dados da iteração atual no arquivo CSV
+                with open(csv_output_path, mode='a', newline='') as csv_file:
+                    writer = csv.writer(csv_file)
+                    writer.writerows(rows_to_append)
+
+            if shared_ord_file.exists(): os.remove(shared_ord_file)
+
+    print(f"\n✅ Experiment suite successfully completed for problem catalog: [{problem_name.upper()}].")
+
+# ─── COMMAND LINE INTERFACE ENTRY POINT ───────────────────────────────────────
 if __name__ == "__main__":
-    run_benchmarks()
+    parser = argparse.ArgumentParser(description="Advanced Benchmarking Framework for Hardware Model Checking Paradigms.")
+    parser.add_argument("--problem", type=str, required=True, help="The target base name of the problem (e.g., 'dining', 'counter').")
+    parser.add_argument("--heuristics", type=str, default="default,random:42,force:500,dynamic", help="Comma-separated variable ordering strategies.")
+    parser.add_argument("--iterations", type=int, default=30, help="Number of multi-sample iterations per configuration grid.")
+    parser.add_argument("--algorithms", type=str, default="bdd,labelling-scc", help="Comma-separated checker verification engine paradigms.")
+
+    args = parser.parse_args()
+
+    heuristics_list = [h.strip() for h in args.heuristics.split(",")]
+    algorithms_list = [a.strip() for a in args.algorithms.split(",")]
+
+    execute_benchmark_suite(
+        problem_name=args.problem,
+        heuristics=heuristics_list,
+        iterations=args.iterations,
+        algorithms=algorithms_list
+    )
