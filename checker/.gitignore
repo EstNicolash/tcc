@@ -3,6 +3,9 @@
 *.smv
 *.txt
 *.ord
+*.pdf
+.vscode
+*.ipynb
 
 /target/
 raw/

@@ -66,7 +66,14 @@
             pkgs.time
             nusmv
             nuxmv
-            python3
+            python314
+            python314Packages.pandas
+            python314Packages.matplotlib
+            python314Packages.seaborn
+            python314Packages.ipykernel
+            python314Packages.scipy
+            python314Packages.numpy
+            python314Packages.lifelines
           ];
 
           shellHook = ''
