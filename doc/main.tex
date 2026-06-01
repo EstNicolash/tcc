@@ -7,7 +7,7 @@
 %\usepackage{amssymb, amsthm} 
 \usepackage{hyperref}
 
-
+\usepackage[portuguese, ruled, lined]{algorithm2e}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{listings}
@@ -94,27 +94,61 @@
 	Para efetuar tal comparação, foi definido um subconjunto da linguagem SMV, a linguagem de descrição do modelo usada no NuSMV, para que ambas as ferramentas processem o mesmo sistema de transições.
 	
 	\subsection{Implementação}
-	NuSMV é implementado em C. Com isto em mente, a implementação do verificador (DAR UM NOME PARA ELE), para ter uma comparação justa, também foi implementado numa linguagem mais próxima ao hardware. No caso, a linguagem Rust foi escolhida por apresentar algumas boas conveniências de desenvolvimento, como seu gerenciador de pacotes \textit{cargo}, garantindo um melhor gerenciamento de dependências e, consequentemente, reprodutibilidade dos experimentos. Além disso, Rust se sobressai por ser uma linguagem moderna e segura no que tange o gerenciamento de memória. As bibliotecas e suas versões usadas encontram-se na documentação do projeto nos arquivos \textit{Cargo.toml} e \textit{Cargo.lock}, disponível em \cite{??}.
+	NuSMV é implementado em C. Com isto em mente, a implementação do verificador (DAR UM NOME PARA ELE), para ter uma comparação justa, também foi implementado numa linguagem mais próxima ao hardware. No caso, a linguagem Rust foi escolhida por apresentar algumas boas conveniências de desenvolvimento, como seu gerenciador de pacotes \textit{cargo}, garantindo um melhor gerenciamento de dependências e, consequentemente, reprodutibilidade dos experimentos. Além disso, Rust se sobressai por ser uma linguagem moderna e segura no que tange o gerenciamento de memória.
+	
+	\subsubsection*{Ambiente de Desenvolvimento, Bibliotecas e Reprodutibilidade}
+	As bibliotecas e suas versões usadas encontram-se na documentação do projeto nos arquivos \textit{Cargo.toml} e \textit{Cargo.lock}, disponível em \cite{??}.
 	O projeto também foi desenvolvido com o uso do gerenciador de pacotes \textit{Nix} e sua funcionalidade experimental \textit{flake}, o que permite a fixação de dependências, permitindo que o projeto tenha uma etapa de \textit{build} consistente e reproduzível em diferentes máquinas (????).
-
+	
 	\subsection{Metodologia dos testes}
+	Nesta subseção será apresentada a metodologia de teste usada para comparar 
 	\subsubsection*{Instâncias}
-	Diversas instâncias foram selecionadas para testar o verificador, ver os limites de cada algoritmo. A preferência foi por problemas paramétricos em que é possível averiguar os efeitos num problema de mesma natureza, mas com um crescimento no número de estados. A forma em que cada instância é gerada e quais propriedades são verificadas podem ser vistas na documentação do projeto. As instâncias de teste são:
+	Diversas instâncias foram selecionadas para testar o verificador, ver os limites de cada algoritmo. A preferência foi por problemas paramétricos em que é possível averiguar os efeitos num problema de mesma natureza, mas com um crescimento no número de estados.A forma em que cada instância é gerada e quais propriedades são verificadas podem ser vistas na documentação do projeto. Os problemas apresentados são típicos de sistemas reativos: algoritmos de exclusão mútua e protocolos de comunicação, contudo há problemas de outra natureza, como poder ser visto logo abaixo:
 	\begin{itemize}
 		\item \textit{dining\_N}: o clássico problema do jantar dos filósofos, onde $N$ é o número de filósofos sentados a mesa.
 		\item \textit{counter\_N}: um contador binário de $N$ bits. Possui uma estrutura facilmente explorável por algoritmos simbólicos e péssimo para algoritmos explícitos.
 		\item \textit{rule30\_N}: um automato celular da regra 30. Um problema de natureza caótica.
 		\item \textit{coi\_chaos\_killer\_N}: um problema que necessita de uma otimização de \textit{cone of influence} para poder ser resolvido.
 		\item \textit{bad\_order\_N}: o pior caso de um ordenamento de variáveis, usado principalmente para testar a qualidade dos reordenamento em BDDs.  
-		\item ...
+		\item \textit{brp2\_N}: \textit{Bounded Retransmission Protocol} com $N$ sendo o número de retransmissões.
+		\item \textit{elevator2\_N}: um modelo que representa um elevador num edifício de $N$ andares.
+		\item \textit{mcs\_N}: o algoritmo de contenção de Mellor-Crummey e Scott com $N$ processos.
+		\item \textit{sokoban\_N}: um problema do jogo Sokoban com $N$ caixas.
+		\item \textit{fischer\_N}: o algoritmo de exclusão mútua de Fischer com $N$ processos.
+		\item \textit{synapse\_N}: protocolo de coerência de cache Synapse com $N$ caches.
+		\item \textit{train\_gate\_N}: Protocolo Train-Gate para $N$ nós.
 	\end{itemize}
 	
+	As instâncias \textit{brp2\_N}, \textit{elevator2\_N}, \textit{mcs\_N}, \textit{sokoban\_N}, \textit{fischer\_N}, \textit{synapse\_N} e \textit{train\_gate\_N} foram construídas em cima das instância BEEM disponíveis em \citeonline{ParaDiSe}. 
+	A escolha deste conjunto de problemas se deu devido a similaridade razoável dos modelos DVE, presentes no BEEM, com modelos SMV. 
+	A conversão de DVE para SMV foi feita com IA. Não se garante a correção perfeita dos modelos, porém, ao menos, as especificações são corretamente verificadas em todos os casos.
+	\subsubsection*{Dados coletados}
+	Para cada execução de um modelo SMV, os seguinte dados foram coletados:
+	\begin{itemize}
+		\item \textbf{Tempo de Compilação:} o tempo \textit{parsing} do SMV e construção do BDD ou da estrutura de Kripke explícita.
+		\item \textbf{Tempo de Verificação:} o tempo para verificar todas as propriedades CTL no modelo.
+		\item \textbf{Tempo Total:} o tempo total de execução (compilação+verificação).
+		\item \textbf{Nós Estáticos:} o número de nós do BDD após a compilação.
+		\item \textbf{Nós de Verificação:} o número de nós de BDD após a verificação.
+		\item \textbf{Pico de Memória:} o pico de memória usado durante a execução, coletada com a ferramenta \textit{time} do Linux.
+		\item \textbf{Número de estados:} o número de estados exploráveis pelo algorítimo explícito. 
+	\end{itemize}
+	\subsubsection*{Execuções}
+	São 30 execuções para cada configuração de instância e heurística de ordenamento de variáveis. 
+	No caso da verificação em BDD, o NUSMV e o () são executados de forma paralela. 
+	Há um tempo limite estático de 60 segundos para uma execução. 
+	Porém, há também um tempo limite dinâmico, o qual serve para encerrar o processo competidor caso ele demore muito para terminar sua execução, ou seja, assumimos como não sendo competitivo. 
+	Este tempo limite dinâmico é definido pela função $f(t) = t + 10\sqrt{t}+5$ onde $t$ é tempo de execução do primeiro programa (NuSMV ou ()) que terminou, ou seja, caso NuSMV tenha terminado no tempo $t$, () tem até o tempo $f(t)$ para terminar.
 	
-	\subsubsection*{Coleta de dados}
-	\subsection{Ambiente de Desenvolvimento}
-	Configuração do PC?
+	\subsubsection*{Visualização e teste}
+	Foram produzidos as seguintes visualizações:\\
+	Foram usados os seguintes testes estatísticos.\\
+	
+	
+	
+	
 	\subsection{Uso de Inteligência Artificial Generativa}
-	Inteligências artificiais generativas foram usadas no desenvolvimento do verificador. O seu uso principal foi em código não relevante para a compreensão dos algoritmos, como no desenvolvimento do \textit{parsing}, na produção de testes unitários, na refatoração de código, na interface de linha de comando e na documentação inicial. Os modelos usados foram \textbf{Gemini 3.1} e \textbf{Claude Sonnet 4.6}.
+	Inteligências artificiais generativas foram usadas no desenvolvimento do verificador. O seu uso principal foi em código não relevante para a compreensão dos algoritmos, como no desenvolvimento do \textit{parsing}, no gerador de instâncias, na produção de testes unitários, na refatoração de código, na interface de linha de comando e na documentação inicial. Os modelos usados foram \textbf{Gemini 3.1} e \textbf{Claude Sonnet 4.6}.
 	
 	
 	
@@ -211,21 +245,72 @@
 	
 	
 	\subsection{Propriedade de ponto fixo}
+	REMOVER?
 	
-	\chapter{Linguagem ssmv}
-	\section{Motivos da escolha pelo SMV}
-	\section{Sintaxe}	
-	\section{Semântica}
+	\chapter{SMV, NuSMV e SSMV}
+	A razão pela opção de comparar com o NuSMV se dá pelo fato de o SMV ser pioneiro na verificação simbólica de modelos. 
+	Além disso, o SMV foi concebido inicialmente para a lógica CTL, sendo então facilmente conversível para as representações em BDD ou simbólica para esta lógica, a qual define o escopo deste trabalho.
 	
-	\chapter{Verificação de modelos explícita}
-	\section{O problema da explosão de estados}
-	\section{Algoritmo de rotulação (labelling)}
-	\section{Notas Implementação}
-	\section{Resultados e Avaliação}
+	
+	Mais especificamente, este trabalho faz a comparação com a reimplementação NuSMV. 
+	Há razões de interesse prático para esta escolha: 
+	Em primeiro lugar, possui código aberto, permitindo uma análise mais minuciosa das diferenças com a implementação de (). 
+	Em segundo lugar, o NuSMV atualmente ainda é relevante. 
+	Por exemplo, SMV é a linguagem de descrição (modelagem) e o NuSMV é um dos núcleos do nuXmv, o qual tem uma boa participação recente em uma competição de verificação de modelos em hardware \cite{HWMCC25} e um uso industrial relevante para um design da NASA \cite{rozierMoXIIntermediateLanguage2025}.
+	
+	Para evitar trabalho desnecessário aos propósitos desta pesquisa, reduzimos a linguagem SMV no verificador () para um subconjunto (SSMV, de \textit{Subset} SMV) contendo apenas as estruturas de dados primitivas (inteiros, enumerações e boolianos) e um único módulo (MAIN), sem especificações LTL e sem diretivas específicas de FAIRNESS, TRANSITION, etc.
+	A gramática SSMV foi construída de forma mais restrita para simplicidade de implementação, o que leva à sua não caracterização em si como um subconjunto da linguagem SMV. Entretanto, as instâncias foram construídas de um modo que ambos os verificadores consigam compreender e reproduzir os mesmos resultados.
+		
+	
+	
+	
+\chapter{Verificação de modelos explícita}
+
+Neste capítulo, será apresentada a verificação de modelos explícita, na qual o modelo SMV é representado em uma estrutura de Kripke. Os resultados da implementação desse algoritmo serão analisados conjuntamente com a comparação entre os motores simbólicos a partir do Capítulo \ref{verificacao_simbolica}.
+
+
+\section{Algoritmo de rotulação (\textit{labelling})}
+O algoritmo para verificação explícita implementado foi o algoritmo de rotulação, apresentado primeiramente no trabalho seminal de \citeonline{clarkeDesignSynthesisSynchronization1982}. 
+A formulação usada como referência inicial foi a de \citeonline{huthLogicComputerScience2000}. 
+A implementação em Rust pode ser acessada no código-fonte disponível em \citeonline{??}.
+
+\section{Notas de Implementação}
+Para evitar ao máximo o desperdício de memória desse algoritmo, algumas escolhas cruciais de estruturas de dados foram feitas seguindo o paradigma \textit{Data-Oriented Design} (DOD). 
+Como resultado, houve uma redução de aproximadamente 70\% no uso de memória em algumas execuções. 
+As principais razões para tal otimização foram:
+\begin{itemize}
+	\item Uso de arenas, que são vetores unidimensionais, para armazenar os dados. Qualquer referência aos dados é feita por um identificador único, o qual representa a posição da arena na qual ele se encontra.
+	\item Com essa estrutura de dados, é possível implementar um mecanismo para evitar a duplicação de dados. Por exemplo, uma mesma proposição não precisa ser alocada mais de uma vez na memória, mesmo que apareça repetidamente na descrição ou na especificação.
+	\item O \textit{frame} de transições é representado por uma matriz CSR (\textit{Compressed Sparse Row}), ideal para grafos esparsos e exploração de localidade na memória.
+	\item Os conjuntos de estados são representados internamente por \textit{bitsets}, permitindo que as operações de conjuntos sejam executadas bit a bit (\textit{bitwise}).
+\end{itemize}     
+
+\section{O problema da explosão de estados}
+
+O principal problema da verificação explícita, principalmente do algoritmo mais ingênuo de rotulagem, é que ela sofre por completo com o maior desafio da verificação de modelos: a explosão de estados \cite{??}. 
+Isso pode ser exemplificado de forma simples: seja um modelo $M$ com $N$ variáveis boolianas; assumindo que todas as combinações de valores sejam acessíveis, teremos ao final $2^N$ estados possíveis.
+Assim, o obstáculo do algoritmo de rotulação surge principalmente no tamanho do modelo, dada sua complexidade pseudopolinomial $O(|M||f|)$, onde $|M|$ é o tamanho do modelo (a soma do número de estados e do número de transições) e $|f|$ é o tamanho da fórmula \cite{baierPrinciplesModelChecking2008a}.
+O grande movimento dos pesquisadores, então, consiste em encontrar formas de reduzir o tamanho da representação do espaço de estados, construindo representações simbólicas ou abstratas \cite{clarkeIntroductionModelChecking2018}.
+Nos capítulos a seguir, será apresentada a principal representação simbólica usada para a lógica CTL.
+
+
+
+\begin{figure}[H]
+	\centering
+	% Cria um bloco preto de 10cm de largura por 6cm de altura como placeholder
+	\rule{10cm}{6cm} 
+	\caption{Gráfico com explosão de estados.}
+	\label{fig:exemplo_explosao}
+\end{figure}
+
+
+
+\chapter{Binary Decision Diagrams}
+	
 	
 	
 	\chapter{Binary Decision Diagrams}
-	
+	(REDUZIR)
 	\section{\textit{Switching Functions}}
 	A verificação simbólica opera sobre conjuntos de estados representados por funções boolianas.
 	
@@ -643,6 +728,7 @@
 	\end{itemize}
 	
 	\chapter{Verificação de modelos simbólica}
+	\label{verificacao_simbolica}
 	\section{Algortimo de derificação simbólica}
 	\subsection{Notas de implementação}
 	\textbf{OxiDD}: uma biblioteca para \textit{Binary Decision Diagrams} (BDDs) apresentada em \citeonline{husungOxiDDSafeConcurrent2024}.
@@ -673,7 +759,18 @@
 
 	
 	\chapter{Conclusão}
-	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+	
+	Trabalhos futuros:
+	\begin{itemize}
+		\item Restrição de \textit{fairness}.
+		\item Geração de contraexemplos.
+		\item Mudança para ADD (\textit{Algebraic Decision Diagrams} / MTBDD) para lidar com estruturas numéricas.
+		\item Reordenamento dinâmico de variáveis (aguardar atualização da biblioteca OxiDD).
+		\item Expansão para LTL.
+		\item Comparação de desempenho com outros verificadores.
+		\item Migração da linguagem de entrada para MoXI.
+	\end{itemize}
 	
 	\bibliographystyle{abntex2-alf}
 	\bibliography{references}
