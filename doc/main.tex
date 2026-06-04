@@ -395,9 +395,7 @@ O grande movimento dos pesquisadores, então, consiste em encontrar formas de re
 	
 	
 	
-	\chapter{Codificação modelos SSMV para BDDs}
-	
-	\chapter{Codificação de Modelos SSMV para BDDs}
+	\chapter{Codificação de Modelos SSMV para \textit{switching functions}}
 	
 	Em \citeonline{baierPrinciplesModelChecking2008a}, apresenta-se como codificar estruturas de Kripke (sistemas de transição, na terminologia dos autores) em \textit{switching functions}. 
 	Como se utiliza um modelo baseado em SMV, é necessário realizar um tratamento específico para cada tipo de dado e expressão da linguagem de descrição, tais como atribuições, condicionais, enumerações, etc.
@@ -422,19 +420,22 @@ O grande movimento dos pesquisadores, então, consiste em encontrar formas de re
 		\item \textbf{a->b}: $f_{\text{a->b}} = f_a\to f_b$.
 	\end{itemize}
 	
-	\section{Codificação de expressões relacionais}
-	Seja $n = len(a) = len(b)$, $x_i$ são as variáveis codificadas de \textbf{a} e  $y_i$ são as variáveis codificadas de \textbf{b}.
+
+	
+	\section{Codificação de Expressões Relacionais}
+	Sejam $\textbf{a}$ e $\textbf{b}$ dois vetores de bits boolianos de largura $n$ (normalizados via extensão de zeros caso possuam tamanhos originais distintos), onde $x_i$ representa os bits que codificam $\textbf{a}$ e $y_i$ os bits que codificam $\textbf{b}$, indexados do bit menos significativo ($i=1$) ao mais significativo ($i=n$).
 	\begin{itemize}
-		\item \textbf{a = b}: $f_{\text{a=b}} =  \bigwedge_{i=1}^n (x_i \leftrightarrow y_i)$
-			\item \textbf{a != b}: $f_{\text{a!=b}} =  \neg f_{\text{a=b}}$
+		\item \textbf{a = b}: $f_{\text{a=b}} = \bigwedge_{i=1}^n (x_i \leftrightarrow y_i)$
+		\item \textbf{a != b}: $f_{\text{a!=b}} = \neg f_{\text{a=b}}$
 		\item \textbf{a > b}: $f_{\text{a>b}} = \bigvee_{i=1}^n \left( (x_i \land \neg y_i) \land \bigwedge_{j=i+1}^n (x_j \leftrightarrow y_j) \right)$
-		\item \textbf{a<=b}: $f_{\text{a<=b}} = \neg f_{\text{a>b}}$
-		\item \textbf{a<b}: $f_{\text{a<b}} = f_{\text{b>a}}$
-		\item \textbf{a>=b}: $f_{\text{a>=b}} = \neg f_{\text{a<b}}$
+		\item \textbf{a <= b}: $f_{\text{a<=b}} = \neg f_{\text{a>b}}$
+		\item \textbf{a < b}: $f_{\text{a<b}} = f_{\text{b>a}}$
+		\item \textbf{a >= b}: $f_{\text{a>=b}} = \neg f_{\text{a<b}}$
 	\end{itemize}
 	
+	
 	\section{Codificação de Operações Aritméticas}
-	A aritmética de vetores de bits é implementada simulando circuitos combinatórios através de operações lógicas em BDDs. 
+	A aritmética de vetores de bits é implementada simulando circuitos combinatórios através de operações lógicas. 
 	
 	\subsection*{Adição (Ripple Carry Adder)}
 	A soma de dois vetores de bits $\textbf{a}$ e $\textbf{b}$ de tamanho $n$ é realizada bit a bit, propagando um bit de transporte (\textit{carry}). O bit de transporte inicial é definido como $c_0 = 0$. Para cada bit $i \in \{1, \dots, n\}$, o bit de soma $s_i$ e o próximo \textit{carry} $c_{i}$ são calculados como:
@@ -450,33 +451,35 @@ O grande movimento dos pesquisadores, então, consiste em encontrar formas de re
 		\item $sub_i = x_i \oplus \neg y_i \oplus c_{i-1}$.
 	\end{itemize}
 	
-	\section{Relações de atribuição}
-	\subsection*{Enumerações/conjuntos}
-	Seja um conjunto/enumeração $\{e_1,e_2,...,e_k\}$, $f_{x'}=e_i$ a função que atribui $e_i$ a variável futura $x'$.
+	  \section{Relações de Atribuição}
+	\subsection*{Enumerações e Conjuntos}
+	Seja um conjunto de elementos determinísticos $\{e_1, e_2, \dots, e_k\}$, a função que atribui uma constante não-determinística a uma variável de estado futuro $x'$ é expressa pela disjunção das relações individuais de equivalência:
 	\begin{equation}
-		f_{enum} = \bigvee_{i=1}^k f_{x'=e_i}
+		f_{enum} = \bigvee_{i=1}^k (x' \leftrightarrow e_i)
 	\end{equation}
 	
-	\subsection*{Condicionais}
-	A expressão \textbf{\textit{cond}} possui um conjunto de expressões de clausulas $\{c_1,c_2,.., c_n\}$ que condicionam para um dos respectivas expressões finais $\{r_1, r_2, ..., r_n\}$. No SSMV são usados apenas nas atribuições de \textit{next} sendo a principal expressão, por exemplo: \textit{next(x) := case $c_1$ : $r_1$; $c_2$ : $r_2$ ...; esac;}
-	A codificação é feita como uma série de \textit{if-then-else} encadeados, assim, pode ser representado pela operação $ITE(x,y,z)$. 
+	\subsection*{Condicionais (\textit{Case})}
+	As expressões condicionais avaliam uma sequência de cláusulas de guarda $\{c_1, c_2, \dots, c_n\}$ associadas a seus respectivos blocos de atribuição final $\{r_1, r_2, \dots, r_n\}$. No modelo SSMV, essas estruturas mapeiam o comportamento lógico do operador \textit{next}, assumindo a forma \textit{next(x) := case c\_1 : r\_1; \dots; esac;}.
 	
+	A compilação é realizada por meio do encadeamento ordenado de operadores \textit{if-then-else} ($ITE$), processados recursivamente a partir da última cláusula (fundo do anidamento):
 	\begin{equation}
 		f_{case} = ITE(c_1, f_{x'=r_1}, ITE(c_2, f_{x'=r_2}, \dots ITE(c_n, f_{x'=r_n}, \text{false}) \dots ))
 	\end{equation}
 	
-	\section{Relação de Transição (\texorpdfstring{$\Delta$}{Delta})}
-	A relação de transição é codificada como uma fórmula booliana relacionando variáveis do presente ($x$) e do futuro ($x'$). A forma que isto é feita é monolítica, pois tratamos as relações como uma relação de transição global.
+	\section{Relação de Transição Transicional (\texorpdfstring{$\Delta$}{Delta})}
+	A relação de transição global do sistema é codificada como uma fórmula booliana monolítica que restringe o comportamento conjunto de todas as variáveis do presente ($s$) e suas respectivas projeções no estado futuro ($s'$):
 	\begin{equation}
 		\Delta(s, s') = \bigwedge_{v \in Var} \mathcal{R}_v(s, s')
 	\end{equation}
 	
-	Onde $Rv(s,s')$ é a função construído para a variável $v$ da linguagem de descrição SSMV, integrando as regras de:
+	Onde $\mathcal{R}_v(s,s')$ representa a relação de atribuição construída para a variável $v$ com base no bloco gramatical do modelo SSMV, integrando as seguintes regras de mapeamento:
 	\begin{itemize}
-		\item \textbf{Atribuição Simples:} $R_v=(x'\leftrightarrow f_x(s))$
-		\item \textbf{Conjuntos:} $R_v= \bigvee_{i=1}^k(x'\leftrightarrow e_i)$
-		\item \textbf{Condicionais (Case):} $R_v = ITE(c_1,R_{x_1},ITE(c_2,R_{x_2},…))$
+		\item \textbf{Atribuição Simples:} $\mathcal{R}_v = (x' \leftrightarrow f_x(s))$
+		\item \textbf{Conjuntos/enumerações:} $\mathcal{R}_v = \bigvee_{i=1}^k(x' \leftrightarrow e_i)$
+		\item \textbf{Condicionais (Case):} $\mathcal{R}_v = ITE(c_1, \mathcal{R}_{x_1}, ITE(c_2, \mathcal{R}_{x_2}, \dots, \text{false}))$
 	\end{itemize}
+	
+	
 	
 	
 	\chapter{Verificação de modelos simbólica}
