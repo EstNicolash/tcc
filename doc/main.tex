@@ -9,7 +9,7 @@
 
 \usepackage{listings}
 \usepackage{xcolor}
-
+\usepackage{float}
 
 \lstset{
 	basicstyle=\ttfamily\small,
@@ -66,59 +66,97 @@
 	
 	\section{Motivação}
 	
-	Um sistema reativo é um programa cujo comportamento não é a mera computação de um função, i.e., um programa que meramente recebe um \textit{input} e retorna um \textit{output}, encerrando-se num estado de terminação. Um sistema reativo, na verdade, é um programa que está em constate execução e sempre interagindo com o seu ambiente. Neste sentido, podemos dizer que um sistema reativo está num ciclo infinito de respostas. Exemplos típicos deste tipo de sistema são: protocolos de comunicação, sistemas embarcados, sistemas operacionais, etc. 
+	Segundo \citeonline{clarkeModelChecking2018}, um sistema reativo é um programa cujo comportamento não se resume à mera computação de uma função, isto é, um aparato que simplesmente recebe um \textit{input}, processa-o e retorna um \textit{output}, encerrando-se em um estado de terminação. 
+	Um sistema reativo, ma verdade, trata-se de um \textit{software} em constante execução e em permanente interação com o seu ambiente, operando em um ciclo contínuo de respostas.
+    \citeonline{emerson25mc2008} elenca como exemplos típicos desse tipo de sistema os protocolos de comunicação, os sistemas embarcados e os sistemas operacionais, observando que muitos deles enquadram-se na categoria de missão crítica. 
+    Nesses cenários, uma falha de \textit{software} pode causar danos catastróficos, comprometendo tanto a vida humana quanto a estabilidade econômica \cite{emerson25mc2008, baierPrinciplesModelChecking2008a}. 
+    Apesar das dificuldades que o desenvolvimento destes sistemas podem ter, grande parte deles possui um domínio finito de estados, o que permite uma busca exaustiva por todos os estado alcançáveis pelo sistema \cite{clarkeModelChecking2018}. 
+    Dessa forma, torna-se possível verificar, com rigor matemático, se o modelo satisfaz uma determinada propriedade especificada \cite{baierPrinciplesModelChecking2008a}. 
+    Na literatura, essa abordagem de exploração exaustiva do espaço de estados é denominada \textbf{verificação de modelos} (\textit{model checking}).
 	
-	Muitos destes sistemas se enquadram como de missão crítica, ou seja, uma falha de \textit{software} pode causar danos graves, seja para a vida de pessoas, como em programas médicos, ou para a economia \cite{?}. Apesar das dificuldades que o desenvolvimento destes sistemas podem ter, grande parte deles possui um domínio finito de estados, o que permite uma busca exaustiva em todos os estado alcançáveis pelo sistema. Desta forma, é possível verificar com precisão matemática se um sistema possui uma determinada propriedade \cite{?}. Na literatura, esta abordagem exaustiva no espaço de estados se chama \textbf{verificação de modelos} (\textit{model checking}). 
+	Para isso, o sistema é descrito por meio de um sistema de transição, o qual é verificado com o intuito de determinar se constitui ou não um modelo válido para uma fórmula de lógica temporal \cite{huthLogicComputerScience2000}. 
+	Uma lógica temporal é um tipo de lógica modal cujos operadores possuem uma interpretação de tempo, sendo ideal para expressar as propriedades de forma precisa em sistemas reativos que executam por períodos indeterminados \cite{emerson25mc2008}. 
+	Especificamente, na verificação de modelos, essas lógicas comumente lidam apenas com operadores direcionados ao tempo futuro. 
+	Como a verificação é feita em todo o espaço de estados, o método enfrenta o desafio da \textbf{explosão do espaço de estados}. 
+	Essa limitação impulsiona o desenvolvimento de algoritmos voltados à redução do espaço de busca, seja por meio de otimizações diretas em algoritmos explícitos, seja através de abordagens de representação simbólica ou abstrata do modelo \cite{huthLogicComputerScience2000, clarkeModelChecking2018}.
 	
-	Para isto, um sistema é descrito num sistema de transição o qual será verificado para saber se é um modelo ou não de um fórmula de uma lógica temporal. Uma lógica temporal é um lógica modal onde os operadores modais possuem um interpretação de tempo, sendo ideias para expressar as propriedades de forma precisa de um sistema reativo, o qual justamente executa por um período indeterminado. Especificamente, na verificação de modelos, geralmente estas lógicas apenas lidam com operadores futuros. Como a verificação é feita em todo o espaço de estados, a verificação de modelos possui o problema da \textbf{explosão do espaço de estados}, o que leva a algoritmos buscarem formas de reduzir o espaço, seja por otimização direta em algoritmos explicito ou uma representação simbólica ou abstrata do modelo \cite{??}.
 	
-	Desde a sua gênese, a área de verificação de modelos vem ganhando cada vez mais espaço em aplicações reais. O maior sucesso da área está no contexto de \textit{hardware}, com ferramentas de verificação sendo essenciais em programas de síntese de circuitos digitais \cite{?}. Ao contrário do caso do \textit{hardware}, há uma recepção menor para \textit{softwares}, principalmente em aplicações já desenvolvidas. 
-	Contudo, isto é razão para o progresso da verificação de modelos. Ademais, segundo \citeonline{clarkeIntroductionModelChecking2018}, há três fatos que garantirão o progresso e o sucesso da área, sendo eles: a onipresença de hardwares e softwares só aumenta, evoluindo ainda mais a complexidade da comunicação e se tornando ainda mais presente em missões críticas; há uma mudança na avaliação de qualidade computacional para além do desempenho e do número de funcionalidades, há uma crescente valorização da correção, confiabilidade, segurança e robustez; por fim, os sistemas de transição estados pode ser usado universalmente como ferramenta em outras áreas, como na produção, design, biologia, etc.
+	Desde a sua gênese, a área de verificação de modelos vem ganhando cada vez mais espaço em aplicações reais. O maior sucesso da área está no contexto de \textit{hardware}, com ferramentas de verificação sendo essenciais em programas de síntese de circuitos digitais \cite{clarkeIntroductionModelChecking2018}. Ao contrário do caso do \textit{hardware}, há uma recepção menor para \textit{softwares}, principalmente em aplicações já desenvolvidas. 
+	Contudo, isso é razão para o progresso da verificação de modelos. Ademais, segundo \citeonline{clarkeIntroductionModelChecking2018}, há três fatos que garantirão o progresso e o sucesso da área, sendo eles: a onipresença de \textit{hardwares} e \textit{softwares} só aumenta, evoluindo ainda mais a complexidade da comunicação e se tornando ainda mais presente em missões críticas; há uma mudança na avaliação de qualidade computacional para além do desempenho e do número de funcionalidades, havendo uma crescente valorização da correção, confiabilidade, segurança e robustez; por fim, os sistemas de transição de estados podem ser usados universalmente como ferramenta em outras áreas, como na produção, \textit{design}, biologia, etc.
 	
 	
 	
 	\section{Objetivos e Metodologia}
-	Visto a importância da área, o objetivo geral deste trabalho é revisar os principais avanços de verificarão de modelos. 
+	Vista a importância da área, o objetivo geral deste trabalho é revisar e analisar de forma prática os principais avanços na verificação de modelos. 
 	Dado que existem diferentes lógicas para descrever as propriedades a serem verificadas, o escopo desta investigação será reduzido à lógica \textit{Computation Tree Logic} (CTL) sem \textit{fairness} e sem a construção de contraexemplos. 
-	A revisão foi feita seguindo os principais livros-texto da área. 
-	Além disto, os principais algoritmos foram implementados incrementalmente, assim, foi possível averiguar as dificuldades teoricamente apresentadas. 
-	Tudo isto fora feito com o intuito de tentar se aproximar do estado da arte, i.e., o que as principais ferramentas acadêmicas e comerciais fazem. 
+	A fundamentação teórica foi estruturada com base nos principais livros-texto da área.
+	Além disto, os principais algoritmos foram implementados incrementalmente, assim, foi possível averiguar as dificuldades práticas e teóricas apresentadas. 
+	Tudo isto fora feito com o intuito de tentar se aproximar do estado da arte, i.e., o que as principais ferramentas acadêmicas e comerciais consolidadas fazem. 
 	
 	
-	Em virtude disso, o verificador implementado foi comparado com uma ferramenta já consolidada, no caso, NuSMV. E cada passo desenvolvido foi devidamente documentado.
+	Em virtude disso, o verificador implementado foi comparado diretamente com o NuSMV.
 	A comparação serviu para a correção dos algoritmos e também para comparar a eficiência de tempo e memória de uma implementação simples, construída num projeto individual, seguindo como referência o que está disponível em livros-textos. 
 	Desta forma, contrastando com uma ferramenta industrial aperfeiçoada por décadas.  
-	Para efetuar tal comparação, foi definido um subconjunto da linguagem SMV, a linguagem de descrição do modelo usada no NuSMV, para que ambas as ferramentas processem o mesmo sistema de transições.
+	Para efetuar tal comparação, foi definido um subconjunto da linguagem SMV, a linguagem de descrição do modelo usada no NuSMV, para que ambas as ferramentas processem o mesmo modelo.
 	
 	\subsection{Implementação}
-	NuSMV é implementado em C. Com isto em mente, a implementação do verificador (DAR UM NOME PARA ELE), para ter uma comparação justa, também foi implementado numa linguagem mais próxima ao hardware. No caso, a linguagem Rust foi escolhida por apresentar algumas boas conveniências de desenvolvimento, como seu gerenciador de pacotes \textit{cargo}, garantindo um melhor gerenciamento de dependências e, consequentemente, reprodutibilidade dos experimentos. Além disso, Rust se sobressai por ser uma linguagem moderna e segura no que tange o gerenciamento de memória.
+	O verificador implementado neste projeto recebeu o nome de PLACEHOLDER para melhor identificação no texto.
+	
+	Como o NuSMV é implementado na linguagem C, optou-se por desenvolver o PLACEHOLDER também em uma linguagem de programação mais próxima ao hardware, visando assegurar uma comparação de desempenho justa. 
+	A linguagem Rust foi escolhida por apresentar conveniências modernas de desenvolvimento, como o seu gerenciador de pacotes \textit{cargo}, o qual assegura o gerenciamento estrito de dependências e, consequentemente, a reprodutibilidade dos experimentos. 
+	Ademais, Rust sobressai-se por ser uma linguagem que oferece garantias nativas de segurança e eficiência no gerenciamento de memória em tempo de compilação.
 	
 	\subsubsection*{Ambiente de Desenvolvimento, Bibliotecas e Reprodutibilidade}
-	As bibliotecas e suas versões usadas encontram-se na documentação do projeto nos arquivos \textit{Cargo.toml} e \textit{Cargo.lock}, disponível em \cite{??}.
-	O projeto também foi desenvolvido com o uso do gerenciador de pacotes \textit{Nix} e sua funcionalidade experimental \textit{flake}, o que permite a fixação de dependências, permitindo que o projeto tenha uma etapa de \textit{build} consistente e reproduzível em diferentes máquinas (????).
+	As bibliotecas e suas versões usadas encontram-se na documentação do projeto nos arquivos \textit{Cargo.toml} e \textit{Cargo.lock}.
+	O projeto também foi desenvolvido com o uso do gerenciador de pacotes declarativo \textit{Nix} e sua funcionalidade experimental \textit{flake}, o que permite a fixação de dependências, permitindo que o projeto tenha uma etapa de compilação (\textit{build}) consistente e reproduzível em diferentes máquinas com os arquivos \textit{flake.nix} e \textit{flake.lock}. Todos arquivos mencionados estão disponíveis no repositório público do projeto disponível em \cite{??}.
+	
+	Tanto o desenvolvimento quanto a execução dos experimentos e a coleta de dados foram realizados em um ambiente de hardware com a especificação detalhada na Tabela~\ref{tab:ambiente_hardware}.
+	\begin{table}[h!]
+		\centering
+		\caption{Especificação do Ambiente de Hardware Utilizado nos Testes.}
+		\label{tab:ambiente_hardware}
+		\begin{tabular}{ll}
+			\toprule  
+			\textbf{Componente} & \textbf{Especificação Técnica} \\ 
+			\midrule  
+			Processador (CPU)   & AMD Ryzen 7 5700X (8 núcleos / 16 threads, até 4.6 GHz) \\
+			Memória RAM         & 32 GB DDR4 3200 MHz \\
+			Armazenamento       & SSD NVMe M.2 (PCIe 4.0, Leitura: 7000 MB/s) \\
+			Sistema Operacional & NixOS (Linux Kernel 7.0.10-cachyos-lto / Arquitetura x86\_64) \\ 
+			\bottomrule 
+		\end{tabular}
+	\end{table}
 	
 	\subsection{Metodologia dos testes}
-	Nesta subseção será apresentada a metodologia de teste usada para comparar 
+	\label{sec:metodologia_t}
+	Nesta subseção será apresentada a metodologia de teste usada para comparar os dois verificadores. Será apresentado as instâncias, os dados coletados e forma de execução dos programas.
+	
 	\subsubsection*{Instâncias}
 	Diversas instâncias foram selecionadas para testar o verificador, ver os limites de cada algoritmo. A preferência foi por problemas paramétricos em que é possível averiguar os efeitos num problema de mesma natureza, mas com um crescimento no número de estados.A forma em que cada instância é gerada e quais propriedades são verificadas podem ser vistas na documentação do projeto. Os problemas apresentados são típicos de sistemas reativos: algoritmos de exclusão mútua e protocolos de comunicação, contudo há problemas de outra natureza, como poder ser visto logo abaixo:
 	\begin{itemize}
-		\item \textit{dining\_N}: o clássico problema do jantar dos filósofos, onde $N$ é o número de filósofos sentados a mesa.
-		\item \textit{counter\_N}: um contador binário de $N$ bits. Possui uma estrutura facilmente explorável por algoritmos simbólicos e péssimo para algoritmos explícitos.
-		\item \textit{rule30\_N}: um automato celular da regra 30. Um problema de natureza caótica.
-		\item \textit{coi\_chaos\_killer\_N}: um problema que necessita de uma otimização de \textit{cone of influence} para poder ser resolvido.
-		\item \textit{bad\_order\_N}: o pior caso de um ordenamento de variáveis, usado principalmente para testar a qualidade dos reordenamento em BDDs.  
-		\item \textit{brp2\_N}: \textit{Bounded Retransmission Protocol} com $N$ sendo o número de retransmissões.
-		\item \textit{elevator2\_N}: um modelo que representa um elevador num edifício de $N$ andares.
-		\item \textit{mcs\_N}: o algoritmo de contenção de Mellor-Crummey e Scott com $N$ processos.
-		\item \textit{sokoban\_N}: um problema do jogo Sokoban com $N$ caixas.
-		\item \textit{fischer\_N}: o algoritmo de exclusão mútua de Fischer com $N$ processos.
-		\item \textit{synapse\_N}: protocolo de coerência de cache Synapse com $N$ caches.
-		\item \textit{train\_gate\_N}: Protocolo Train-Gate para $N$ nós.
+		\item \textit{dining\_N}: o clássico problema do jantar dos filósofos, onde $N$ representa o número de filósofos sentados à mesa.
+		\item \textit{counter\_N}: um contador binário de $N$ bits, caracterizado por possuir uma estrutura compacta em algoritmos simbólicos e expansão geométrica em representações explícitas.
+		\item \textit{rule30\_N}: um autômato celular baseado na Regra 30, apresentando um comportamento de propagação caótico.
+		\item \textit{coi\_chaos\_killer\_N}: uma instância estruturada para avaliar a necessidade de otimizações baseadas em cone de influência.
+		\item \textit{bad\_order\_N}: modelo que emula o pior caso de ordenamento de variáveis em BDDs, utilizado para testar a sensibilidade das heurísticas de reordenamento.  
+		\item \textit{brp2\_N}: protocolo de retransmissão limitada (\textit{Bounded Retransmission Protocol}), onde $N$ define o número limite de retransmissões.
+		\item \textit{elevator2\_N}: modelo de transição que representa um elevador em um edifício de $N$ andares.
+		\item \textit{mcs\_N}: o algoritmo de exclusão mútua em filas de Mellor-Crummey e Scott avaliado para $N$ processos concorrentes.
+		\item \textit{sokoban\_N}: modelo de planejamento baseado no jogo Sokoban contendo $N$ blocos de caixas.
+		\item \textit{fischer\_N}: o algoritmo de exclusão mútua baseado em tempo de Fischer testado para $N$ processos.
+		\item \textit{synapse\_N}: protocolo de coerência de cache Synapse avaliado para $N$ caches independentes.
+		\item \textit{train\_gate\_N}: protocolo de controle de tráfego ferroviário (\textit{Train-Gate}) parametrizado para $N$ nós concorrentes.
 	\end{itemize}
 	
 	As instâncias \textit{brp2\_N}, \textit{elevator2\_N}, \textit{mcs\_N}, \textit{sokoban\_N}, \textit{fischer\_N}, \textit{synapse\_N} e \textit{train\_gate\_N} foram construídas em cima das instância BEEM disponíveis em \citeonline{ParaDiSe}. 
 	A escolha deste conjunto de problemas se deu devido a similaridade razoável dos modelos DVE, presentes no BEEM, com modelos SMV. 
-	A conversão de DVE para SMV foi feita com IA. Não se garante a correção perfeita dos modelos, porém, ao menos, as especificações são corretamente verificadas em todos os casos.
+	, porém, ao menos, as especificações são corretamente verificadas em todos os casos.
+	
+	As instâncias \textit{brp2\_N}, \textit{elevator2\_N}, \textit{mcs\_N}, \textit{sokoban\_N}, \textit{fischer\_N}, \textit{synapse\_N} e \textit{train\_gate\_N} foram adaptadas a partir dos modelos de referência da suíte BEEM disponíveis em \citeonline{ParaDiSe}. 
+	A escolha desse conjunto decorreu da compatibilidade estrutural entre a modelagem em DVE e a linguagem SMV. 
+	A conversão de DVE para SMV foi feita com IA, assim, não se garante a correção perfeita dos modelos.
+	Contudo, o processo de tradução e mapeamento dos modelos foi validado de forma cruzada, garantindo que as especificações CTL pretendidas sejam avaliadas corretamente em todos os cenários (DiVinE (DVE), NuSMV e PLACEHOLDER).
+	
 	\subsubsection*{Dados coletados}
 	Para cada execução de um modelo SMV, os seguinte dados foram coletados:
 	\begin{itemize}
@@ -132,10 +170,17 @@
 	\end{itemize}
 	\subsubsection*{Execuções}
 	São 30 execuções para cada configuração de instância e heurística de ordenamento de variáveis. 
-	No caso da verificação em BDD, o NUSMV e o () são executados de forma paralela. 
+	No caso da verificação em BDD, o NUSMV e o PLACEHOLDER são executados de forma paralela. 
 	Há um tempo limite estático de 60 segundos para uma execução. 
 	Porém, há também um tempo limite dinâmico, o qual serve para encerrar o processo competidor caso ele demore muito para terminar sua execução, ou seja, assumimos como não sendo competitivo. 
-	Este tempo limite dinâmico é definido pela função $f(t) = t + 10\sqrt{t}+5$ onde $t$ é tempo de execução do primeiro programa (NuSMV ou ()) que terminou, ou seja, caso NuSMV tenha terminado no tempo $t$, () tem até o tempo $f(t)$ para terminar.
+	Este tempo limite dinâmico é definido pela função $f(t) = t + 10\sqrt{t}+5$ onde $t$ é tempo de execução do primeiro programa (NuSMV ou ()) que terminou, ou seja, caso NuSMV tenha terminado no tempo $t$, PLACEHOLDER tem até o tempo $f(t)$ para terminar.
+	Para uma comparação o mais justa possível, o NuSMV foi executado com as seguintes \textit{flags}:
+	\begin{itemize}
+		\item \textbf{\textit{-dxi}}: remove a geração de contra-exemplos, algo que a implementação de PLACEHOLDER não faz.
+		\item \textbf{\textit{-coi}}: ativa uma otimização \textit{cone of influence} previa, pois biblioteca de BDDs usada no desenvolvimento deste projeto utiliza algumas otimizações que trazem um efeito similar a esta otimização.
+		\item \textbf{\textit{-mono}}: ativa as relações de transição monolíticas que também é usado em PLACEHOLDER.
+	\end{itemize}
+	
 	
 	\subsubsection*{Visualização e teste}
 	Foram produzidos as seguintes visualizações:\\
@@ -177,7 +222,8 @@
 	
 	\section{Computation Tree Logic (CTL)}
 	\label{sec:ctl}
-	Seguindo a formalização de \cite{baierPrinciplesModelChecking2008a}.
+	As lógicas temporais são usadas como as linguagens de especificação das propriedades \cite{clarkeIntroductionModelChecking2018}.
+	Nesta seção, será apresentada a lógica CTL, sua interpretação informal, sintaxe e semântica seguindo a formalização de \citeonline{baierPrinciplesModelChecking2008a}.
 	
 	\subsection{Interpretação do tempo}
 	Uma lógica temporal necessita de uma interpretação específica. 
@@ -241,9 +287,6 @@
 	\end{itemize}
 	
 	
-	\subsection{Propriedade de ponto fixo}
-	REMOVER?
-	
 	\chapter{SMV, NuSMV e SSMV}
 	A razão pela opção de comparar com o NuSMV se dá pelo fato de o SMV ser pioneiro na verificação simbólica de modelos. 
 	Além disso, o SMV foi concebido inicialmente para a lógica CTL, sendo então facilmente conversível para as representações em BDD ou simbólica para esta lógica, a qual define o escopo deste trabalho.
@@ -289,18 +332,12 @@ Isso pode ser exemplificado de forma simples: seja um modelo $M$ com $N$ variáv
 Assim, o obstáculo do algoritmo de rotulação surge principalmente no tamanho do modelo, dada sua complexidade pseudopolinomial $O(|M||f|)$, onde $|M|$ é o tamanho do modelo (a soma do número de estados e do número de transições) e $|f|$ é o tamanho da fórmula \cite{baierPrinciplesModelChecking2008a}.
 O grande movimento dos pesquisadores, então, consiste em encontrar formas de reduzir o tamanho da representação do espaço de estados, construindo representações simbólicas ou abstratas \cite{clarkeIntroductionModelChecking2018}.
 
-\begin{figure}
-	\centering
-	\rule{10cm}{6cm} 
-	\caption{Gráfico com explosão de estados.}
-	\label{fig:exemplo_explosao}
-\end{figure}
-
-
-	
-
-
-
+	\begin{figure}[h!]
+		\centering
+		\rule{10cm}{6cm} 
+		\caption{Gráfico com explosão de estados.}
+		\label{fig:exemplo_explosao}
+	\end{figure}
 
 
 	
@@ -396,6 +433,7 @@ O grande movimento dos pesquisadores, então, consiste em encontrar formas de re
 	
 	
 	\chapter{Codificação de Modelos SSMV para \textit{switching functions}}
+	\label{ch:code}
 	
 	Em \citeonline{baierPrinciplesModelChecking2008a}, apresenta-se como codificar estruturas de Kripke (sistemas de transição, na terminologia dos autores) em \textit{switching functions}. 
 	Como se utiliza um modelo baseado em SMV, é necessário realizar um tratamento específico para cada tipo de dado e expressão da linguagem de descrição, tais como atribuições, condicionais, enumerações, etc.
@@ -461,7 +499,7 @@ O grande movimento dos pesquisadores, então, consiste em encontrar formas de re
 	\subsection*{Condicionais (\textit{Case})}
 	As expressões condicionais avaliam uma sequência de cláusulas de guarda $\{c_1, c_2, \dots, c_n\}$ associadas a seus respectivos blocos de atribuição final $\{r_1, r_2, \dots, r_n\}$. No modelo SSMV, essas estruturas mapeiam o comportamento lógico do operador \textit{next}, assumindo a forma \textit{next(x) := case c\_1 : r\_1; \dots; esac;}.
 	
-	A compilação é realizada por meio do encadeamento ordenado de operadores \textit{if-then-else} ($ITE$), processados recursivamente a partir da última cláusula (fundo do anidamento):
+	A compilação é realizada por meio do encadeamento ordenado de operadores \textit{if-then-else} ($ITE$), processados recursivamente a partir da última cláusula:
 	\begin{equation}
 		f_{case} = ITE(c_1, f_{x'=r_1}, ITE(c_2, f_{x'=r_2}, \dots ITE(c_n, f_{x'=r_n}, \text{false}) \dots ))
 	\end{equation}
@@ -482,29 +520,41 @@ O grande movimento dos pesquisadores, então, consiste em encontrar formas de re
 	
 	
 	
-	\chapter{Verificação de modelos simbólica}
+	\chapter{Verificação de Modelos Simbólica}
 	\label{verificacao_simbolica}
-	\section{Algortimo de derificação simbólica}
-	\subsection{Notas de implementação}
-	\textbf{OxiDD}: uma biblioteca para \textit{Binary Decision Diagrams} (BDDs) apresentada em \citeonline{husungOxiDDSafeConcurrent2024}.
+	
+	Neste capítulo, serão apresentadas algumas informações sobre o algoritmo implementado, além de uma comparação entre o PLACEHOLDER e o NuSMV. 
+	Na subseção final, essa mesma análise será realizada, mas com a adição de heurísticas de reordenamento de variáveis e a avaliação de seu impacto na verificação.
+	
+	\subsection{Algoritmo e Notas de Implementação}
+	A representação de \textit{switching functions} por BDDs foi realizada utilizando-se a biblioteca 
+	\textbf{OxiDD}, apresentada em \citeonline{husungOxiDDSafeConcurrent2024}.
+	A codificação foi desenvolvida seguindo as definições do Capítulo~\ref{ch:code}. 
+	O algoritmo implementado segue a exata mesma estrutura do algoritmo explícito, com a óbvia diferença de utilizar BDDs como estruturas de dados e operar diretamente sobre eles. Com base em algumas recomendações de \citeonline{baierPrinciplesModelChecking2008a}, algumas informações mais específicas sobre a implementação são detalhadas a seguir:
+	\begin{itemize}
+		\item As variáveis $x_i$ e as variáveis futuras $x_i'$ são sempre intercaladas na ordem $(x_1,x_1', x_2,x_2', \dots, x_n,x_n')$.
+		Essa configuração demonstra-se experimentalmente mais eficiente para as operações em BDDs. 
+		\item Utilizou-se a operação \textit{and-exists} no processamento dos operadores temporais, visto que ela está nativamente disponível na biblioteca OxiDD.
+		\item Fora das recomendações, para as operações aritimética em BDDs, para que os números tivessem o mesmo tamanho, eles foram expandidos (\textit{padding}) para 32 bits. 
+	\end{itemize}
 	
 	\subsection{Resultados e Avaliação}
-	Os testes foram realizados comparando o SSMV com o NuSMV. Os resultados estão resumidos na Tabela \ref{tab:bench}.
+	A definição de quais dados foram coletados, a forma como as comparações foram feitas, os testes estatísticos utilizados e a maneira como as informações são dispostas foram estabelecidos na seção de metodologia (\ref{sec:metodologia_t}). Assim, o presente tópico delimita-se à apresentação dos resultados e à respectiva avaliação deles.
 	
-	\begin{table}[ht]
-		\centering
-		\caption{Comparativo de Performance}
-		\label{tab:bench}
-		\begin{tabular}{@{}lccc@{}}
-			\toprule
-			\textbf{Ferramenta} & \textbf{Tempo (ms)} & \textbf{Nós BDD} & \textbf{Memória (MB)} \\ \midrule
-			SSMV (BDD)          & 1.918               & 1.815.465        & 90,3                  \\
-			NuSMV               & 6.998               & 482.151          & 65,6                  \\ \bottomrule
-		\end{tabular}
-	\end{table}
+
+
+	\section{Verificação Simbólica com Reordenamento de Variáveis Estático}
+	Segundo \citeonline{baierPrinciplesModelChecking2008a}, a ordem das variáveis pode afetar drasticamente o tamanho do BDD. 
+	Para analisar esse problema, o PLACEHOLDER foi expandido para comportar o reordenamento de variáveis estático. 
+	Não foi possível implementar o reordenamento dinâmico, uma vez que a biblioteca OxiDD não possui suporte para essa funcionalidade.
+	As heurísticas usadas nos testes foram:
+	\begin{itemize}
+	\item \textbf{Aleatória}: um ordenamento aleatório das variáveis a partir de uma semente (\textit{seed}).
+	\item \textbf{FORCE}: uma heurística baseada em hipergrafos, apresentada em \citeonline{aloulFORCEFastEasytoimplement2003}.
+	\item \textbf{\textit{Sifting}}: o algoritmo de reordenamento dinâmico do NuSMV. O resultado desse reordenamento foi extraído e aplicado estaticamente tanto no PLACEHOLDER quanto no próprio NuSMV para fins de comparação.
+	\end{itemize}
 	
-	\section{Verificação simbólica com reordenamento de variáveis estático}
-	Foram usados o ordenamento topológico (ordem de declaração do arquivo .smv), aleatório, heurística FORCE de \citeonline{aloulFORCEFastEasytoimplement2003} e heurística \textit{sifting} produzida pelo NuSMV.
+
 	\subsection{Notas de implementação}
 	\subsection{Resultados e Avaliação}
 	
@@ -516,16 +566,19 @@ O grande movimento dos pesquisadores, então, consiste em encontrar formas de re
 	\chapter{Conclusão}
 	Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
 	
-	Trabalhos futuros:
-	\begin{itemize}
-		\item Restrição de \textit{fairness}.
-		\item Geração de contraexemplos.
-		\item Mudança para ADD (\textit{Algebraic Decision Diagrams} / MTBDD) para lidar com estruturas numéricas.
-		\item Reordenamento dinâmico de variáveis (aguardar atualização da biblioteca OxiDD).
-		\item Expansão para LTL.
-		\item Comparação de desempenho com outros verificadores.
-		\item Migração da linguagem de entrada para MoXI.
-	\end{itemize}
+
+	Como propostas para trabalhos futuros, pretende-se estender a análise dos verificadores de lógica CTL, adicionando principalmente o estudo das restrições de \textit{fairness} e a geração de contraexemplos, os quais não foram incluídos no escopo deste trabalho.
+	Algumas limitações de desempenho do PLACEHOLDER podem ter ocorrido devido à forma como as operações aritméticas foram representadas, i.e., em nível de bits. 
+	Conforme discutido anteriormente (adiconar isto), o NuSMV representa os números e suas respectivas operações por meio de ADDs (\textit{Algebraic Decision Diagrams} ou MTBDDs). 
+	Como a biblioteca OxiDD possui suporte a MTBDDs, seria possível realizar uma migração para este nova representação e diagnosticar com maior precisão as divergências de eficiência entre os dois motores de verificação.
+	A implementação do reordenamento dinâmico de variáveis também se mostra interessante, (...). Contudo, essa evolução depende diretamente de atualizações futuras na biblioteca OxiDD, a qual ainda não possui suporte.
+	Outra frente a ser explorada é a extensão do verificador para a lógica LTL, a qual possui uma vasta quantidade de algoritmos e representações simbólicas distintas na literatura.
+	Por fim, ao longo do desenvolvimento deste projeto, constatou-se uma grande dificuldade para encontrar casos de teste consolidados ou uma linguagem de descrição de modelos que fosse universalmente padronizada. 
+	A escolha do escopo, portanto, ficou limitada ao ecossistema do NuSMV, exigindo o desenvolvimento de instâncias próprias para a execução das avaliações comparativas.
+	A falta de padronização na área é um problema também abordado em \citeonline{rozierMoXIIntermediateLanguage2025}, cujo objetivo é propor uma linguagem de descrição comum para diferentes motores de verificação.
+	Atualizar o PLACEHOLDER para suportar essa linguagem intermediária demonstra-se viável, principalmente por permitir uma comparação com outras ferramentas de verificação além do NuSMV.
+	
+	
 	
 	\bibliographystyle{abntex2-alf}
 	\bibliography{references}
