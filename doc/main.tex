@@ -881,13 +881,13 @@ Os gráficos de monitoramento e as tabelas de dados brutos remanescentes dessas 
 	
 
 
-	\chapter{Verificação Simbólica com Reordenamento de Variáveis Estático}
+	\chapter{Verificação Simbólica com Reordenamento de Variáveis}
 	Segundo \citeonline{baierPrinciplesModelChecking2008a}, a ordem das variáveis pode afetar drasticamente o tamanho do BDD. 
 	Para analisar esse problema, o PLACEHOLDER foi expandido para comportar o reordenamento de variáveis estático. 
 	Não foi possível implementar o reordenamento dinâmico, uma vez que a biblioteca OxiDD não possui suporte para essa funcionalidade.
 	As heurísticas usadas nos testes foram:
 	\begin{itemize}
-	\item \textbf{Aleatória}: um ordenamento aleatório das variáveis a partir de uma semente (\textit{seed}).
+	\item \textbf{Aleatória (\textit{random})}: um ordenamento aleatório das variáveis a partir de uma semente (\textit{seed}).
 	\item \textbf{FORCE}: uma heurística baseada em hipergrafos, apresentada em \citeonline{aloulFORCEFastEasytoimplement2003}.
 	\item \textbf{\textit{Sifting}}: o algoritmo de reordenamento dinâmico do NuSMV. O resultado desse reordenamento foi extraído e aplicado estaticamente tanto no PLACEHOLDER quanto no próprio NuSMV para fins de comparação.
 	\end{itemize}
@@ -895,83 +895,528 @@ Os gráficos de monitoramento e as tabelas de dados brutos remanescentes dessas 
 
 	
 	\section{Resultados e Avaliação}
+	\subsection{Problema dos Filósofos (\textit{Dining})}
+	\label{sec:res_dining2}
+	O resultado das heurísticas é bom em todas as métricas coletadas.
+	Visualmente, as curvas seguem um ordenamento onde a padrão é a pior (topológico, ordem de declaração), depois a heurística aleatória com uma curva praticamente equivalente, depois, com muita mais folga, vem a heurística FORCE e, com mais folga ainda, a heurística \textit{sifting}. 
+	A queda abrupta na curva da heurística aleatória no caso do \texttt{llull-BDD} em  $N=16$ se deu por causa de um ordenamento único e sortudo.
+	O resultado dos testes estatísticos na heurística FORCE e \textit{sifting} entre os dois verificadores mantém resultados muito similares com o ordenamento padrão visto na Seção~\ref{sec:res_dining}, revelando uma robustez na implementação de ambos.
+	É possível observar, no gráfico do NuSMV, o custo do ordenamento dinâmico ao comparar o \textit{sifting} dinâmico (\texttt{dynamic-sifting}) com a injeção estática \texttt{static-sifting} do da ordem final do \textit{sifting}.
+	Porém, o que mais relevante neste resultado é que foi possível terminar todas as instâncias deste problema com a heurística \textit{sifting}, o que não foi possível com o ordenamento padrão. 
+	O que pode ser observado com melhor clareza nas curvas de sobrevivências (figuras \ref{fig:dining_surv_default}, \ref{fig:dining_surv_force} e \ref{fig:dining_surv_dynamic}).
 	
-	\subsection{Jantar dos filósofos (\textit{dining})}
-	\label{sec:dining_heurísticas}
-	
-	Para avaliar a sensibilidade do verificador \texttt{llull-BDD} e do NuSMV diante da disposição geométrica das variáveis na árvore de decisão, estendeu-se o experimento para as heurísticas de reordenamento dinâmico (\textit{Dynamic}), ordenamento baseado em forças (\textit{FORCE}) e atribuição aleatória (\textit{Random}). 
-	
-	\begin{figure}[htbp]
-		\centering
-		% Subfigura 1: llull-BDD (Foco em Verificação)
-		\begin{minipage}{0.48\textwidth}
-			\centering
-			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_comp_heuristica_llull_bdd_dining_verify_ms.pdf}
-			\caption{Heurísticas no \texttt{llull-BDD}.}
-			\label{fig:dining_comp_heurísticas_llull_bdd}
-		\end{minipage}
-		\hfill
-		% Subfigura 2: NuSMV-static
-		\begin{minipage}{0.48\textwidth}
-			\centering
-			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_comp_heuristica_nusmv_static_dining_verify_ms.pdf}
-			\caption{Heurísticas no NuSMV.}
-			\label{fig:dining_comp_heurísticas_nusmv}
-		\end{minipage}
-		\caption{Comparativo do impacto de diferentes heurísticas de ordenamento no tempo de verificação pura ($Verify\_MS$) entre os motores simbólicos.}
-		\label{fig:dining_macro_heurísticas}
-	\end{figure}
 	
 	\begin{figure}[htbp]
 		\centering
-		% Subfigura 1: Sobrevivência sob Heurística Dinâmica
+		% Linha 1: Tempo Total de Execução (MS)
 		\begin{minipage}{0.48\textwidth}
 			\centering
-			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_survival_kaplan_meier_dining_dynamic.pdf}
-			\caption{Sobrevivência sob Heurística Dinâmica.}
-			\label{fig:dining_survival_dynamic}
+			\includegraphics[width=\textwidth]{figures/fig/resultados_dining/grafico_comp_heuristica_llull_bdd_dining_total_ms.pdf}
+			\caption{Tempo Total no \texttt{llull-BDD}.}
+			\label{fig:dining_heur_total_llull}
 		\end{minipage}
 		\hfill
-		% Subfigura 2: Sobrevivência sob Heurística Aleatória (Random)
 		\begin{minipage}{0.48\textwidth}
 			\centering
-			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_survival_kaplan_meier_dining_random.pdf}
-			\caption{Sobrevivência sob Ordenamento Aleatório.}
-			\label{fig:dining_survival_random}
+			\includegraphics[width=\textwidth]{figures/fig/resultados_dining/grafico_comp_heuristica_nusmv_dining_total_ms.pdf}
+			\caption{Tempo Total no \texttt{NuSMV-static}.}
+			\label{fig:dining_heur_total_nusmv}
 		\end{minipage}
-		\caption{Estimadores de sobrevivência de Kaplan-Meier comparando a resiliência operacional das ferramentas sob diferentes cenários de estresse geométrico.}
-		\label{fig:dining_survival_combinado}
+		
+		\vspace{0.8em}
+		
+		% Linha 2: Consumo de Memória RAM (MB)
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_dining/grafico_comp_heuristica_llull_bdd_dining_peak_mem_mb.pdf}
+			\caption{Memória RAM no \texttt{llull-BDD} (MB).}
+			\label{fig:dining_heur_mem_llull}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_dining/grafico_comp_heuristica_nusmv_dining_peak_mem_mb.pdf}
+			\caption{Memória RAM no \texttt{NuSMV-static} (MB).}
+			\label{fig:dining_heur_mem_nusmv}
+		\end{minipage}
+		
+		\vspace{0.8em}
+		
+		% Linha 3: Quantidade de Nós Ativos no BDD
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_dining/grafico_comp_heuristica_llull_bdd_dining_verification_nodes.pdf}
+			\caption{Nós do BDD no \texttt{llull-BDD}.}
+			\label{fig:dining_heur_nodes_llull}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_dining/grafico_comp_heuristica_nusmv_dining_verification_nodes.pdf}
+			\caption{Nós do BDD no \texttt{NuSMV-static}.}
+			\label{fig:dining_heur_nodes_nusmv}
+		\end{minipage}
+		\caption{Comparação multidimensional do impacto das heurísticas de ordenamento sobre o Tempo Total, Consumo de Memória RAM e Quantidade de Nós ativos no BDD para as instâncias \textit{dining}.}
+		\label{fig:dining_heuristics_matrix}
 	\end{figure}
 	
+	% =========================================================================
+	% BLOCO 2:  ANÁLISE DE SOBREVIVÊNCIA
+	% =========================================================================
 	\begin{table}[htbp]
 		\centering
-		\caption{Consolidação dos vencedores locais (Teste U de Mann-Whitney) para Tempo Total e Nós BDD sob diferentes heurísticas entre \texttt{llull-BDD} e NuSMV-static.}
-		\label{tab:estatistica_dining_heurísticas}
-		\small
-		\begin{tabular}{rccccccc}
+		\caption{Resultados do teste de Mann-Whitney U e Kolmogorov-Smirnov (KS).}
+		\label{tab:estatistica_unificada_dining_heuristics}
+		\small 
+		\begin{tabular}{rccccc}
 			\toprule
-			& \multicolumn{2}{c}{\textbf{Heurística: DYNAMIC}} & & \multicolumn{2}{c}{\textbf{Heurística: FORCE}} & & \multicolumn{1}{c}{\textbf{Heurística: RANDOM}} \\
-			\cmidrule{2-3} \cmidrule{5-6} \cmidrule{8-8}
-			\textbf{N} & \textbf{Tempo Total} & \textbf{Nós BDD} & & \textbf{Tempo Total} & \textbf{Nós BDD} & & \textbf{Tempo Total} \\
+			\textbf{N} & \textbf{Tempo Total} & \textbf{Compilação} & \textbf{Verificação} & \textbf{Memória} & \textbf{Nós BDD} \\
 			\midrule
-			2  & NuSMV       & \textbf{llull} & & Empate      & \textbf{llull} & & NuSMV \\
-			4  & \textbf{llull} & \textbf{llull} & & Empate      & \textbf{llull} & & Empate \\
-			6  & \textbf{llull} & \textbf{llull} & & \textbf{llull} & \textbf{llull} & & \textbf{llull} \\
-			8  & NuSMV       & \textbf{llull} & & \textbf{llull} & \textbf{llull} & & \textbf{llull} \\
-			10 & NuSMV       & NuSMV       & & NuSMV       & NuSMV       & & \textbf{llull} \\
-			12 & NuSMV       & NuSMV       & & NuSMV       & NuSMV       & & Empate \\
-			14 & NuSMV       & NuSMV       & & NuSMV       & NuSMV       & & Empate \\
+			\multicolumn{6}c{\textbf{Heurística: \textit{FORCE}}} \\
 			\midrule
-			\textbf{KS} & Divergente & Divergente & & Divergente & Divergente & & Divergente \\
+			2  & Empate         & Empate       & NuSMV          & NuSMV          & \textbf{llull} \\
+			4  & Empate         & Empate       & \textbf{llull} & NuSMV          & \textbf{llull} \\
+			6  & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+			10 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+			14 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+			18 & \textbf{llull} & NuSMV        & \textbf{llull} & \textbf{llull} & \textbf{llull} \\
+			22 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & NuSMV          \\
+			\midrule
+			\textbf{KS} & Divergente & Divergente & Divergente & Divergente & Divergente \\
+			\midrule
+			\multicolumn{6}c{\textbf{Heurística: \textit{SIFTING}}} \\
+			\midrule
+			2  & NuSMV          & NuSMV        & Empate         & NuSMV          & \textbf{llull} \\
+			4  & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+			6  & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+			10 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+			14 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+			18 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+			24 & \textbf{llull} & NuSMV        & \textbf{llull} & \textbf{llull} & \textbf{llull} \\
+			\midrule
+			\textbf{KS} & Divergente & Divergente & Divergente & Divergente & Divergente \\
 			\bottomrule
 		\end{tabular}
 	\end{table}
 	
+	\begin{figure}[htbp]
+		\centering
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_dining/grafico_survival_kaplan_meier_dining_default.pdf}
+			\caption{Sobrevivência em \textit{default}.}
+			\label{fig:dining_surv_default}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_dining/grafico_survival_kaplan_meier_dining_force.pdf}
+			\caption{Sobrevivência em \textit{force}.}
+			\label{fig:dining_surv_force}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_dining/grafico_survival_kaplan_meier_dining_sifting.pdf}
+			\caption{Sobrevivência em \textit{sifting}.}
+			\label{fig:dining_surv_dynamic}
+		\end{minipage}
+		\label{fig:dining_survival_monolithic}
+	\end{figure}
 	\FloatBarrier
 	
 	
+\subsection{Problema do Contador (\textit{Counter})}
+\label{sec:res_counter2}
+Diferente do cenário do problema do jantar dos filósofos (\textit{dining}), o comportamento em todas métricas é basicamente o mesmo.
+Visualmente, as curvas das figuras \ref{fig:counter_heuristics_matrix} coincidem ao ponto de quase serem indiferenciáveis. 
+Esta comparação revela que, apesar do ordenamento ser um problema para o tamanho do BDD, é possível que não haja uma ordem melhor dado a natureza de algumas instâncias.
+Não é necessariamente o caso deste problema, pois pode haver uma heurística que consiga uma ordem melhor, mas possivelmente não há, dado que sequer é possível ver uma variabilidade nas curvas da heurística aleatória (ver as figuras de \ref{fig:dining_heuristics_matrix} para comparar).
+
+
+\begin{figure}[htbp]
+	\centering
+	% Linha 1: Tempo Total de Execução (MS)
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_counter/grafico_comp_heuristica_llull_bdd_counter_total_ms.pdf}
+		\caption{Tempo Total no \texttt{llull-BDD}.}
+		\label{fig:counter_heur_total_llull}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_counter/grafico_comp_heuristica_nusmv_counter_total_ms.pdf}
+		\caption{Tempo Total no NuSMV.}
+		\label{fig:counter_heur_total_nusmv}
+	\end{minipage}
 	
+	\vspace{0.8em}
+	
+	% Linha 2: Consumo de Memória RAM (MB)
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_counter/grafico_comp_heuristica_llull_bdd_counter_peak_mem_mb.pdf}
+		\caption{Memória RAM no \texttt{llull-BDD} (MB).}
+		\label{fig:counter_heur_mem_llull}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_counter/grafico_comp_heuristica_nusmv_counter_peak_mem_mb.pdf}
+		\caption{Memória RAM no NuSMV (MB).}
+		\label{fig:counter_heur_mem_nusmv}
+	\end{minipage}
+	
+	\vspace{0.8em}
+	
+	% Linha 3: Quantidade de Nós Ativos no BDD
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_counter/grafico_comp_heuristica_llull_bdd_counter_verification_nodes.pdf}
+		\caption{Nós do BDD no \texttt{llull-BDD}.}
+		\label{fig:counter_heur_nodes_llull}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_counter/grafico_comp_heuristica_nusmv_counter_verification_nodes.pdf}
+		\caption{Nós do BDD no NuSMV.}
+		\label{fig:counter_heur_nodes_nusmv}
+	\end{minipage}
+	\caption{Comparação multidimensional do impacto das heurísticas de ordenamento sobre o Tempo Total, Consumo de Memória RAM e Quantidade de Nós ativos no BDD para as instâncias \textit{counter}.}
+	\label{fig:counter_heuristics_matrix}
+\end{figure}
+
+% =========================================================================
+% BLOCO 2: TABELA DE CONTRASTE ESTATÍSTICO CRUZADO ENTRE MOTORES
+% =========================================================================
+\begin{table}[htbp]
+	\centering
+	\caption{Resultados do teste de Mann-Whitney U e Kolmogorov-Smirnov (KS) para a instância \textit{counter} sob os ordenamentos \textit{force} e \textit{sifting}.}
+	\label{tab:estatistica_unificada_counter_heuristics}
+	\small 
+	\begin{tabular}{rccccc}
+		\toprule
+		\textbf{N} & \textbf{Tempo Total} & \textbf{Compilação} & \textbf{Verificação} & \textbf{Memória} & \textbf{Nós BDD} \\
+		\midrule
+		\multicolumn{6}c{\textbf{Heurística Estática: \textit{FORCE}}} \\
+		\midrule
+		2  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & \textbf{llull} \\
+		4  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & \textbf{llull} \\
+		8  & Empate         & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+		12 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+		16 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & NuSMV          \\
+		18 & \textbf{llull} & NuSMV        & \textbf{llull} & \textbf{llull} & NuSMV          \\
+		20 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & NuSMV          \\
+		\midrule
+		\textbf{KS} & Divergente & Divergente & Empate & Divergente & Divergente \\
+		\midrule
+		\multicolumn{6}c{\textbf{Heurística Dinâmica: \textit{Sifting}}} \\
+		\midrule
+		2  & NuSMV          & NuSMV        & Empate         & NuSMV          & \textbf{llull} \\
+		4  & NuSMV          & NuSMV        & Empate         & NuSMV          & \textbf{llull} \\
+		8  & Empate         & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+		12 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+		16 & \textbf{llull} & NuSMV        & \textbf{llull} & NuSMV          & \textbf{llull} \\
+		18 & \textbf{llull} & NuSMV        & \textbf{llull} & \textbf{llull} & \textbf{llull} \\
+		\midrule
+		\textbf{KS} & Divergente & Divergente & Divergente & Divergente & Divergente \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+% =========================================================================
+% BLOCO 3: CURVAS DE SOBREVIVÊNCIA DE KAPLAN-MEIER
+% =========================================================================
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_counter/grafico_survival_kaplan_meier_counter_default.pdf}
+		\caption{Sobrevivência em \textit{default}.}
+		\label{fig:counter_surv_default}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_counter/grafico_survival_kaplan_meier_counter_force.pdf}
+		\caption{Sobrevivência em \textit{force}.}
+		\label{fig:counter_surv_force}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_counter/grafico_survival_kaplan_meier_counter_dynamic.pdf}
+		\caption{Sobrevivência em \textit{sifting}.}
+		\label{fig:counter_surv_dynamic}
+	\end{minipage}
+	\caption{Estimadores de sobrevivência de Kaplan-Meier para a instância \textit{counter}.}
+	\label{fig:counter_survival_monolithic}
+\end{figure}
+\FloatBarrier
+
+\subsection{Problema do Elevador (\textit{Elevator2})}
+\label{sec:res_elevator22}
+
+Ao contrário dos cenários anteriores, a heurística estática FORCE sobre a instância \textit{elevator2} não obteve sucesso em otimizar o desempenho de ambos os verificadores. O comportamento das curvas sob essa configuração é praticamente idêntico ao ordenamento padrão (\textit{default}), conforme ilustrado na matriz de gráficos da Figura~\ref{fig:elevator2_heuristics_matrix}. 
+Por outro lado, a heurística \textit{sifting} se demonstrou a melhor, levando os dois verificadores a resolverem mais instâncias. 
+Apesar disto, NuSMV se saiu bem melhor, resolve mais instâncias (ver os gráficos de sobrevivência \ref{fig:elevator2_survival_monolithic}) e tem um crescimento das curvas de memória e nós mais controlado.
+
+
+\begin{figure}[htbp]
+	\centering
+	% Linha 1: Tempo Total de Execução (MS)
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_elevator2/grafico_comp_heuristica_llull_bdd_elevator2_total_ms.pdf}
+		\caption{Tempo Total no \texttt{llull-BDD}.}
+		\label{fig:elevator2_heur_total_llull}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_elevator2/grafico_comp_heuristica_nusmv_elevator2_total_ms.pdf}
+		\caption{Tempo Total no NuSMV.}
+		\label{fig:elevator2_heur_total_nusmv}
+	\end{minipage}
+	
+	\vspace{0.8em}
+	
+	% Linha 2: Consumo de Memória RAM (MB)
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_elevator2/grafico_comp_heuristica_llull_bdd_elevator2_peak_mem_mb.pdf}
+		\caption{Memória RAM no \texttt{llull-BDD} (MB).}
+		\label{fig:elevator2_heur_mem_llull}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_elevator2/grafico_comp_heuristica_nusmv_elevator2_peak_mem_mb.pdf}
+		\caption{Memória RAM no NuSMV (MB).}
+		\label{fig:elevator2_heur_mem_nusmv}
+	\end{minipage}
+	
+	\vspace{0.8em}
+	
+	% Linha 3: Quantidade de Nós Ativos no BDD
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_elevator2/grafico_comp_heuristica_llull_bdd_elevator2_verification_nodes.pdf}
+		\caption{Nós do BDD no \texttt{llull-BDD}.}
+		\label{fig:elevator2_heur_nodes_llull}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_elevator2/grafico_comp_heuristica_nusmv_elevator2_verification_nodes.pdf}
+		\caption{Nós do BDD no NuSMV.}
+		\label{fig:elevator2_heur_nodes_nusmv}
+	\end{minipage}
+	\caption{Comparação multidimensional do impacto das heurísticas de ordenamento sobre o Tempo Total, Consumo de Memória RAM e Quantidade de Nós ativos no BDD para a instância \textit{elevator2}.}
+	\label{fig:elevator2_heuristics_matrix}
+\end{figure}
+
+% =========================================================================
+% BLOCO 2: TABELA DE CONTRASTE ESTATÍSTICO CRUZADO ENTRE MOTORES
+% =========================================================================
+\begin{table}[htbp]
+	\centering
+	\caption{Resultados do teste de Mann-Whitney U e Kolmogorov-Smirnov (KS) para a instância \textit{elevator2} sob os ordenamentos \textit{force} e \textit{sifting}.}
+	\label{tab:estatistica_unificada_elevator2_heuristics}
+	\small 
+	\begin{tabular}{rccccc}
+		\toprule
+		\textbf{N} & \textbf{Tempo Total} & \textbf{Compilação} & \textbf{Verificação} & \textbf{Memória} & \textbf{Nós BDD} \\
+		\midrule
+		\multicolumn{6}c{\textbf{Heurística Estática: \textit{FORCE}}} \\
+		\midrule
+		3  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		6  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		9  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		\midrule
+		\textbf{KS} & Divergente & Divergente & Divergente & Divergente & Divergente \\
+		\midrule
+		\multicolumn{6}c{\textbf{Heurística Dinâmica: \textit{Sifting}}} \\
+		\midrule
+		3  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		6  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		9  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		10 & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		12 & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		14 & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		16 & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		17 & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+		\midrule
+		\textbf{KS} & Divergente & Divergente & Divergente & Divergente & Divergente \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+% =========================================================================
+% BLOCO 3: CURVAS DE SOBREVIVÊNCIA DE KAPLAN-MEIER
+% =========================================================================
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_elevator2/grafico_survival_kaplan_meier_elevator2_default.pdf}
+		\caption{Sobrevivência em \textit{default}.}
+		\label{fig:elevator2_surv_default}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_elevator2/grafico_survival_kaplan_meier_elevator2_force.pdf}
+		\caption{Sobrevivência em \textit{force}.}
+		\label{fig:elevator2_surv_force}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/fig/resultados_elevator2/grafico_survival_kaplan_meier_elevator2_dynamic.pdf}
+		\caption{Sobrevivência em \textit{sifting}.}
+		\label{fig:elevator2_surv_dynamic}
+	\end{minipage}
+	\caption{Estimadores de sobrevivência de Kaplan-Meier para a instância \textit{elevator2}.}
+	\label{fig:elevator2_survival_monolithic}
+\end{figure}
+\FloatBarrier
+	
+	
+	\subsection{Sokoban}
+	\label{sec:res_sokoban2}
+
+	
+	Verificando as curvas de sobrevivência (Figura~\ref{fig:sokoban_survival_monolithic}), é possível observar as heurísticas expandiram marginalmente a resiliência dos verificadores. Contudo, nenhum dos ordenamentos foi capaz de otimizar o suficiente para estender a verificação para além de $N=4$.Nesse cenário de maior complexidade, o NuSMV consolidou novamente sua superioridade  frente ao \texttt{llull-BDD}.
+	Vale salientar que, sob a configuração padrão (\textit{default}), o NuSMV obteve sucesso na conclusão da instância $N=4$, divergindo do comportamento observado na Seção~\ref{sec:res_sokoban}. Essa variação pontual de desempenho entre os experimentos sugere uma sensibilidade a fatores do ambiente de execução ou a políticas internas de alocação dinâmica de memória do programa.
+
+	\begin{figure}[htbp]
+		\centering
+		% Linha 1: Tempo Total de Execução (MS)
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban/grafico_comp_heuristica_llull_bdd_sokoban_total_ms.pdf}
+			\caption{Tempo Total no \texttt{llull-BDD}.}
+			\label{fig:sokoban_heur_total_llull}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban/grafico_comp_heuristica_nusmv_sokoban_total_ms.pdf}
+			\caption{Tempo Total no NuSMV.}
+			\label{fig:sokoban_heur_total_nusmv}
+		\end{minipage}
+		
+		\vspace{0.8em}
+		
+		% Linha 2: Consumo de Memória RAM (MB)
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban/grafico_comp_heuristica_llull_bdd_sokoban_peak_mem_mb.pdf}
+			\caption{Memória RAM no \texttt{llull-BDD} (MB).}
+			\label{fig:sokoban_heur_mem_llull}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban/grafico_comp_heuristica_nusmv_sokoban_peak_mem_mb.pdf}
+			\caption{Memória RAM no NuSMV (MB).}
+			\label{fig:sokoban_heur_mem_nusmv}
+		\end{minipage}
+		
+		\vspace{0.8em}
+		
+		% Linha 3: Quantidade de Nós Ativos no BDD
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban/grafico_comp_heuristica_llull_bdd_sokoban_verification_nodes.pdf}
+			\caption{Nós do BDD no \texttt{llull-BDD}.}
+			\label{fig:sokoban_heur_nodes_llull}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban/grafico_comp_heuristica_nusmv_sokoban_verification_nodes.pdf}
+			\caption{Nós do BDD no NuSMV.}
+			\label{fig:sokoban_heur_nodes_nusmv}
+		\end{minipage}
+		\caption{Comparação multidimensional do impacto das heurísticas de ordenamento sobre o Tempo Total, Consumo de Memória RAM e Quantidade de Nós ativos no BDD para a instância \textit{sokoban}.}
+		\label{fig:sokoban_heuristics_matrix}
+	\end{figure}
+	
+	% =========================================================================
+	% BLOCO 2: TABELA DE CONTRASTE ESTATÍSTICO CRUZADO ENTRE MOTORES
+	% =========================================================================
+	\begin{table}[htbp]
+		\centering
+		\caption{Resultados do teste de Mann-Whitney U e Kolmogorov-Smirnov (KS) para a instância \textit{sokoban} sob os ordenamentos \textit{force} e \textit{sifting}.}
+		\label{tab:estatistica_unificada_sokoban_heuristics}
+		\small 
+		\begin{tabular}{rccccc}
+			\toprule
+			\textbf{N} & \textbf{Tempo Total} & \textbf{Compilação} & \textbf{Verificação} & \textbf{Memória} & \textbf{Nós BDD} \\
+			\midrule
+			\multicolumn{6}c{\textbf{Heurística Estática: \textit{FORCE}}} \\
+			\midrule
+			2  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+			3  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+			\midrule
+			\textbf{KS} & Divergente & Divergente & Divergente & Divergente & Divergente \\
+			\midrule
+			\multicolumn{6}c{\textbf{Heurística Dinâmica: \textit{Sifting}}} \\
+			\midrule
+			2  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+			3  & NuSMV          & NuSMV        & NuSMV          & NuSMV          & NuSMV          \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	% =========================================================================
+	% BLOCO 3: CURVAS DE SOBREVIVÊNCIA DE KAPLAN-MEIER
+	% =========================================================================
+	\begin{figure}[htbp]
+		\centering
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban/grafico_survival_kaplan_meier_sokoban_default.pdf}
+			\caption{Sobrevivência em \textit{default}.}
+			\label{fig:sokoban_surv_default}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban/grafico_survival_kaplan_meier_sokoban_force.pdf}
+			\caption{Sobrevivência em \textit{force}.}
+			\label{fig:sokoban_surv_force}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban/grafico_survival_kaplan_meier_sokoban_dynamic.pdf}
+			\caption{Sobrevivência em \textit{sifting}.}
+			\label{fig:sokoban_surv_dynamic}
+		\end{minipage}
+		\caption{Estimadores de sobrevivência de Kaplan-Meier para as instâncias \textit{sokoban}.}
+		\label{fig:sokoban_survival_monolithic}
+	\end{figure}
 	\FloatBarrier
+	
+	\subsection{Síntese dos Demais Cenários Experimentais}
+	\label{sec:sintese_experimentos2}
+	
+	Os dados detalhados referentes aos cenários experimentais restantes da suíte de experimentos não serão apresentados no corpo principal deste capítulo pelas seguintes razões:
+	
+	\begin{itemize}
+		\item \textbf{\textit{Fischer}:} Basicamente, mesmo caso da Seção \ref{sec:sintese_experimentos}. Apresenta outra vez um comportamento similar ao problema \textit{Elevator2} e a política de corte determinada na Seção \ref{sec:metodologia_t} impediu que \texttt{llull-BDD} conseguisse resolver mais instância. Ou seja, outro caso em que NuSMV demonstrou superioridade.
+		\item \textbf{\textit{MCS}:} mesmo cenário limitante observado na instância \textit{Fischer}.
+		\item \textbf{\textit{Synapse}:} apenas o verificador NuSMV conseguiu terminar pelo menos uma instância dado as restrições. As heurísticas conseguiram aumentar a resiliência também, fazendo alcançar até $N=6$ para \textit{sifting} e $N=4$ para FORCE (em comparação, a heurística padrão apenas resolve $N=3$).
+	\end{itemize}
+	\section{Discussão Geral dos Resultados}
+	\FloatBarrier
+	
+
 
 	
 
