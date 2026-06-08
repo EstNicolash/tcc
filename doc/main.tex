@@ -10,6 +10,7 @@
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{float}
+\usepackage{placeins}
 
 \lstset{
 	basicstyle=\ttfamily\small,
@@ -183,8 +184,16 @@
 	
 	
 	\subsubsection*{Visualização e teste}
-	Foram produzidos as seguintes visualizações:\\
-	Foram usados os seguintes testes estatísticos.\\
+	Foram produzidos gráficos de linha para cada um dos dados coletados. 
+	O eixo $y$ dos gráficos representa a métrica medida, enquanto o eixo $x$ é o valor $N$ da instância de um determinado problema.
+	Para fundamentar as conclusões das comparações, foram usados os testes estatísticos U de Mann-Whitney e Kolmogorov–Smirnov. 
+	O uso do primeiro se dá para avaliar as diferenças locais (em um mesmo $N$) e se justifica pelos seguintes motivos:
+	\begin{enumerate}
+		\item \textbf{Ausência de Distribuição Normal:} O consumo de recursos computacionais não segue uma distribuição normal, mas sim exponencial.
+		
+		\item \textbf{Independência das Execuções:} O critério fundamental de independência exigido pelo teste é plenamente satisfeito no nível das execuções (\textit{runs}).
+	\end{enumerate}
+	O segundo teste, de Kolmogorov-Smirnov, é aplicado de forma global para complementar a análise local, sendo utilizado para avaliar se existe um descolamento estatístico relevante entre as curvas empíricas de desempenho dos programas.
 	
 	
 	
@@ -323,6 +332,7 @@ As principais razões para tal otimização foram:
 	\item Com essa estrutura de dados, é possível implementar um mecanismo para evitar a duplicação de dados. Por exemplo, uma mesma proposição não precisa ser alocada mais de uma vez na memória, mesmo que apareça repetidamente na descrição ou na especificação.
 	\item O \textit{frame} de transições é representado por uma matriz CSR (\textit{Compressed Sparse Row}), ideal para grafos esparsos e exploração de localidade na memória.
 	\item Os conjuntos de estados são representados internamente por \textit{bitsets}, permitindo que as operações de conjuntos sejam executadas bit a bit (\textit{bitwise}).
+	\item No processo de compilação, o modelo em SSMV é transformado numa AST (árvore de sintaxe abstrata), que então é transformada numa representação intermediária mais simples para a etapa de codificação para uma estrutura de Kripke. Além disso, há uma estrutura de Kripke no formato de um grafo convencional que então é transformado na representação de matriz CSR.
 \end{itemize}     
 
 \section{O problema da explosão de estados}
@@ -526,7 +536,7 @@ O grande movimento dos pesquisadores, então, consiste em encontrar formas de re
 	Neste capítulo, serão apresentadas algumas informações sobre o algoritmo implementado, além de uma comparação entre o PLACEHOLDER e o NuSMV. 
 	Na subseção final, essa mesma análise será realizada, mas com a adição de heurísticas de reordenamento de variáveis e a avaliação de seu impacto na verificação.
 	
-	\subsection{Algoritmo e Notas de Implementação}
+	\section{Algoritmo e Notas de Implementação}
 	A representação de \textit{switching functions} por BDDs foi realizada utilizando-se a biblioteca 
 	\textbf{OxiDD}, apresentada em \citeonline{husungOxiDDSafeConcurrent2024}.
 	A codificação foi desenvolvida seguindo as definições do Capítulo~\ref{ch:code}. 
@@ -536,14 +546,342 @@ O grande movimento dos pesquisadores, então, consiste em encontrar formas de re
 		Essa configuração demonstra-se experimentalmente mais eficiente para as operações em BDDs. 
 		\item Utilizou-se a operação \textit{and-exists} no processamento dos operadores temporais, visto que ela está nativamente disponível na biblioteca OxiDD.
 		\item Fora das recomendações, para as operações aritimética em BDDs, para que os números tivessem o mesmo tamanho, eles foram expandidos (\textit{padding}) para 32 bits. 
+		\item No processo de compilação, o modelo em SSMV é transformado numa AST, que então é transformado numa representação intermediária mais simples para a etapa de codificação para BDD.
 	\end{itemize}
 	
-	\subsection{Resultados e Avaliação}
-	A definição de quais dados foram coletados, a forma como as comparações foram feitas, os testes estatísticos utilizados e a maneira como as informações são dispostas foram estabelecidos na seção de metodologia (\ref{sec:metodologia_t}). Assim, o presente tópico delimita-se à apresentação dos resultados e à respectiva avaliação deles.
+	\section{Resultados e Avaliação}
+	\label{sec:resultados_avaliacao}
+	
+	A definição de quais dados foram coletados, a forma como as comparações foram feitas, os testes estatísticos utilizados e a maneira como as informações são dispostas foram estabelecidos na seção de metodologia (\ref{sec:metodologia_t}). Assim, o presente tópico delimita-se à apresentação dos resultados e à respectiva avaliação deles. Será apresentada uma subseção por instância caso os resultados da variação escalar sejam relevantes. A razão para não dedicar a cada modelo uma subseção isolada será detalhada na Seção~\ref{sec:outras_inst}.
+	
+	% =========================================================================
+	% 1. DINING
+	% =========================================================================
+	\subsection{Problema dos Filósofos (\textit{Dining})}
+	\label{sec:res_dining}
+	
+	O problema clássico do jantar dos filósofos foi avaliado sob a configuração de ordenamento padrão (\textit{default}). O parâmetro de escala $N$ representa o número de filósofos concorrentes sentados à mesa, expandindo-se de $N=2$ até $N=16$.
+	
+	% =========================================================================
+	% BLOCO UNIFICADO: GRÁFICOS E TABELA NO MESMO AMBIENTE FLUTUANTE
+	% =========================================================================
+	\begin{figure}[htbp]
+		\centering
+		% Linha 1: Tempos
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_log_total_ms_dining_default.pdf}
+			\caption{Tempo Total.}
+			\label{fig:dining_total_default}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_log_verify_ms_dining_default.pdf}
+			\caption{Tempo de Verificação.}
+			\label{fig:dining_verify_default}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_log_compile_ms_dining_default.pdf}
+			\caption{Tempo de Compilação.}
+			\label{fig:dining_compile_default}
+		\end{minipage}
+		
+		\vspace{0.8em}
+		
+		% Linha 2: Recursos
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_log_peak_mem_mb_dining_default.pdf}
+			\caption{Pico de Memória RAM (MB).}
+			\label{fig:dining_mem_default}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_log_verification_nodes_dining_default.pdf}
+			\caption{Quantidade de Nós no BDD.}
+			\label{fig:dining_nodes_default}
+		\end{minipage}
+		
+		\vspace{1.5em} % Espaçamento regulatório entre as figuras e a tabela
+		
+		% Linha 3: Tabela Estatística Embutida
+		% Usamos o comando \captionof{table}{...} para manter a legenda correta de Tabela
+		% mesmo estando dentro de um ambiente "figure".
+		\captionof{table}{Resultados do teste de Mann-Whitney U e Kolmogorov-Smirnov (KS) para a instância \textit{dining} entre llull-BDD e NuSMV-static.}
+		\label{tab:estatistica_dining_default}
+		\small % Reduz ligeiramente a fonte para garantir que o bloco cabe perfeitamente na página
+		\begin{tabular}{rccccc}
+			\toprule
+			\textbf{N} & \textbf{Tempo Total} & \textbf{Compilação} & \textbf{Verificação} & \textbf{Memória} & \textbf{Nós BDD} \\
+			\midrule
+			2  & Empate      & Empate       & Empate      & NuSMV       & \textbf{llull} \\
+			4  & \textbf{llull} & NuSMV       & \textbf{llull} & NuSMV       & \textbf{llull} \\
+			6  & \textbf{llull} & NuSMV       & \textbf{llull} & NuSMV       & \textbf{llull} \\
+			8  & \textbf{llull} & NuSMV       & \textbf{llull} & NuSMV       & \textbf{llull} \\
+			10 & \textbf{llull} & NuSMV       & \textbf{llull} & NuSMV       & \textbf{llull} \\
+			12 & \textbf{llull} & NuSMV       & \textbf{llull} & \textbf{llull} & \textbf{llull} \\
+			14 & \textbf{llull} & NuSMV       & \textbf{llull} & NuSMV       & NuSMV \\
+			\midrule
+			\textbf{KS} & Equivalente & Divergente & Equivalente & Divergente & Divergente \\
+			\bottomrule
+		\end{tabular}
+	\end{figure}
+	
+	\vspace{0.5em}
+	
+	Nos gráficos de tempo, vemos que o maior gargalo entre as duas implementações se encontra no tempo de compilação (\textit{parsing} e codificação para BDD ou para uma estrutura de Kripke). 
+	Enquanto o NuSMV permanece praticamente constante, \texttt{llull-BDD} e \texttt{llull-labelling} apresentam crescimento acentuado nessa etapa. 
+	Apesar disso, o tempo de verificação propriamente dito mostra-se razoavelmente próximo entre os motores simbólicos, justificado pelo resultado do teste KS, que aponta equivalência global nas curvas de tempo total e de verificação, apesar das vitórias locais do  apontadas pelo teste U de Mann-Whitney.
+	Podemos averiguar o problema da representação explícita no gráfico de pico de memória, o qual possui menos consumo inicialmente, mostrando também um \textit{overhead} da representação em BDD, mas que depois sobe violentamente, ao contrário da representação simbólica. 
+	No resultado do teste, o NuSMV apresenta menor consumo de memória global.
+	Os dados experimentais revelam que o algoritmo explícito (\texttt{llull-labelling}) atinge seu limite operacional em $N = 12$, o NuSMV em $N = 14$ e o \texttt{llull-BDD} estende-se até $N = 16$. Vale ressaltar que a interrupção do NuSMV em $N=14$ não implica uma incapacidade de resolver o modelo, mas sim que a ferramenta foi parada por um dos critérios estabelecidos na Seção~\ref{sec:metodologia_t}
+	
+	
+	% =========================================================================
+	% 2. COUNTER
+	% =========================================================================
+\subsection{Contador Binário (\textit{Counter})}
+\label{sec:res_counter}
+
+A instância \textit{Counter} avalia o comportamento dos verificadores diante de um modelo altamente regular de um contador binário síncrono parametrizado por um espaço de estados de $N$ bits. O experimento expande o parâmetro de escala de $N=2$ até $N=22$ sob a configuração de ordenamento padrão (\textit{default}).
+
+% GRÁFICOS SEPARADOS (FLUTUAÇÃO PADRÃO)
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/resultados_counter/grafico_log_total_ms_counter_default.pdf}
+		\caption{Tempo Total.}
+		\label{fig:counter_total_default}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/resultados_counter/grafico_log_verify_ms_counter_default.pdf}
+		\caption{Tempo de Verificação.}
+		\label{fig:counter_verify_default}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/resultados_counter/grafico_log_compile_ms_counter_default.pdf}
+		\caption{Tempo de Compilação.}
+		\label{fig:counter_compile_default}
+	\end{minipage}
+	
+	\vspace{0.8em}
+	
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/resultados_counter/grafico_log_peak_mem_mb_counter_default.pdf}
+		\caption{Pico de Memória RAM (MB).}
+		\label{fig:counter_mem_default}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/resultados_counter/grafico_log_verification_nodes_counter_default.pdf}
+		\caption{Quantidade de Nós no BDD.}
+		\label{fig:counter_nodes_default}
+	\end{minipage}
+\end{figure}
+
+\begin{table}[htbp]
+	\centering
+	\caption{Resultados do teste de Mann-Whitney U e Kolmogorov-Smirnov (KS) para a instância \textit{counter} entre llull-BDD e NuSMV-static.}
+	\label{tab:estatistica_counter_default}
+	\small
+	\begin{tabular}{rccccc}
+		\toprule
+		\textbf{N} & \textbf{Tempo Total} & \textbf{Compilação} & \textbf{Verificação} & \textbf{Memória} & \textbf{Nós BDD} \\
+		\midrule
+		2  & NuSMV       & NuSMV       & Empate      & NuSMV       & \textbf{llull} \\
+		4  & NuSMV       & NuSMV       & Empate      & NuSMV       & \textbf{llull} \\
+		8  & Empate      & NuSMV       & \textbf{llull} & NuSMV       & \textbf{llull} \\
+		12 & \textbf{llull} & NuSMV       & \textbf{llull} & NuSMV       & \textbf{llull} \\
+		16 & \textbf{llull} & NuSMV       & \textbf{llull} & NuSMV       & NuSMV \\
+		18 & \textbf{llull} & NuSMV       & \textbf{llull} & \textbf{llull} & NuSMV \\
+		20 & \textbf{llull} & NuSMV       & \textbf{llull} & NuSMV       & NuSMV \\
+		22 & \textbf{llull} & NuSMV       & \textbf{llull} & NuSMV       & NuSMV \\
+		\midrule
+		\textbf{KS} & Divergente & Divergente & Equivalente & Divergente & Divergente \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+	\FloatBarrier
+
+	Nesses cenários, observam-se algumas diferenças em comparação com o problema anterior. Visivelmente, as curvas de tempo total, tempo de verificação, pico de memória e quantidade de nós seguem uma mesma tendência assintótica de crescimento, comportamento que se estende inclusive ao algoritmo explícito. 
+	Contudo, o teste KS aponta divergência global nas curvas de memória e de tempo total, indicando que as diferenças nos valores absolutos entre os motores permanecem estatisticamente significativas. 
+	A etapa de compilação do \texttt{llull-BDD} apresentou um comportamento consideravelmente mais constante e controlado em relação ao problema anterior. 
+	Este experimento, portanto, revela que o presente problema escalam de forma similar tanto à abordagem explícita quanto à simbólica, no sentido de ambas convergirem para uma mesma taxa de crescimento similar ao longo da expansão do espaço de estados.
+		
+	
+	% =========================================================================
+	% 5. ELEVATOR2
+	% =========================================================================
+	\subsection{Controle de Elevador (\textit{Elevator2})}
+	\label{sec:res_elevator2}
+	
+	A instância \textit{Elevator2} simula a lógica de despacho, requisição e movimentação física de uma cabine de elevador operando com um número parametrizado de $N$ andares.
+	
+	\begin{figure}[htbp]
+		\centering
+		% Linha 1: Tempos
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_elevator2/grafico_log_total_ms_elevator2_default.pdf}
+			\caption{Tempo Total.}
+			\label{fig:elevator_total_default}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_elevator2/grafico_log_verify_ms_elevator2_default.pdf}
+			\caption{Tempo de Verificação.}
+			\label{fig:elevator_verify_default}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_elevator2/grafico_log_compile_ms_elevator2_default.pdf}
+			\caption{Tempo de Compilação.}
+			\label{fig:elevator_compile_default}
+		\end{minipage}
+		
+		\vspace{0.8em}
+		
+		% Linha 2: Recursos
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_elevator2/grafico_log_peak_mem_mb_elevator2_default.pdf}
+			\caption{Pico de Memória RAM (MB).}
+			\label{fig:elevator_mem_default}
+		\end{minipage}
+		\hfill
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_elevator2/grafico_log_verification_nodes_elevator2_default.pdf}
+			\caption{Quantidade de Nós no BDD.}
+			\label{fig:elevator_nodes_default}
+		\end{minipage}
+	\end{figure}
+	
+	\begin{table}[h]
+		\centering
+		\caption{Resultados do teste de Mann-Whitney U e Kolmogorov-Smirnov (KS) para a instância \textit{elevator2} entre llull-BDD e NuSMV-static.}
+		\label{tab:estatistica_elevator_default}
+		\small
+		\begin{tabular}{rccccc}
+			\toprule
+			\textbf{N} & \textbf{Tempo Total} & \textbf{Compilação} & \textbf{Verificação} & \textbf{Memória} & \textbf{Nós BDD} \\
+			\midrule
+			3 & NuSMV & NuSMV & NuSMV & NuSMV & NuSMV \\
+			6 & NuSMV & NuSMV & NuSMV & NuSMV & NuSMV \\
+			\midrule
+			\textbf{KS} & Divergente & Divergente & Divergente & Divergente & Divergente \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\FloatBarrier
+	
+	
+	Este é um caso onde NuSMV domina por completo em todas as métricas em relação do llull-BDD.
+	Há um vantagem para o tempo de verificação explícita, mas o tempo de compilação é um gargalo que faz o seu tempo total muito maior.
+	
+	
+	
+	\subsection{Sokoban}
+	\label{sec:res_sokoban}
+	
+	A instância \textit{Sokoban} mapeia as restrições de movimento e empurre de blocos em um tabuleiro bidimensional, onde $N$ parametriza a contagem de caixas ativas a serem posicionadas nos alvos.
+	
+\begin{figure}[htbp]
+	\centering
+	% Linha 1: Tempos
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/resultados_sokoban/grafico_log_total_ms_sokoban_default.pdf}
+		\caption{Tempo Total.}
+		\label{fig:sokoban_total_default}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/resultados_sokoban/grafico_log_verify_ms_sokoban_default.pdf}
+		\caption{Tempo de Verificação.}
+		\label{fig:sokoban_verify_default}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/resultados_sokoban/grafico_log_compile_ms_sokoban_default.pdf}
+		\caption{Tempo de Compilação.}
+		\label{fig:sokoban_compile_default}
+	\end{minipage}
+	
+	\vspace{0.8em}
+	
+	% Linha 2: Recursos
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/resultados_sokoban/grafico_log_peak_mem_mb_sokoban_default.pdf}
+		\caption{Pico de Memória RAM (MB).}
+		\label{fig:sokoban_mem_default}
+	\end{minipage}
+	\hfill
+	\begin{minipage}{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/resultados_sokoban/grafico_log_verification_nodes_sokoban_default.pdf}
+		\caption{Quantidade de Nós no BDD.}
+		\label{fig:sokoban_nodes_default}
+	\end{minipage}
+\end{figure}
+
+\begin{table}[h]
+	\centering
+	\caption{Resultados do teste de Mann-Whitney U e Kolmogorov-Smirnov (KS) para a instância \textit{sokoban} entre llull-BDD e NuSMV-static.}
+	\label{tab:estatistica_sokoban_default}
+	\small
+	\begin{tabular}{rccccc}
+		\toprule
+		\textbf{N} & \textbf{Tempo Total} & \textbf{Compilação} & \textbf{Verificação} & \textbf{Memória} & \textbf{Nós BDD} \\
+		\midrule
+		2 & NuSMV & NuSMV & NuSMV & NuSMV & NuSMV \\
+		3 & NuSMV & NuSMV & NuSMV & NuSMV & NuSMV \\
+		\midrule
+		\textbf{KS} & Divergente & Divergente & Divergente & Divergente & Divergente \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\FloatBarrier
+
+O problema \textit{sokoban} só consegue ser resolvido pelos algoritmos simbólicos.
+Porém, é um caso em que NuSMV supera muito a implementação deste trabalho.
+
+\subsection{Síntese dos Demais Cenários Experimentais}
+\label{sec:sintese_experimentos}
+
+Os dados detalhados referentes aos cenários experimentais restantes da suíte de benchmarks não serão apresentados no corpo principal deste capítulo pelas seguintes razões:
+
+\begin{itemize}
+	\item \textbf{\textit{Fischer}:} apresenta um comportamento similar ao problema \textit{Elevator2}. Contudo, devido à interrupção precoce da execução logo no primeiro valor do parâmetro de escala ($N$), o volume de dados gerado foi insuficiente para a plotagem de curvas temporais ou para a aplicação do teste estatístico global de Kolmogorov-Smirnov (KS).
+	\item \textbf{\textit{MCS}:} mesmo cenário limitante observado na instância \textit{Fischer}.
+	\item \textbf{\textit{Synapse}:}  apenas o verificador NuSMV conseguiu terminar pelo menos uma instância dado as restrições.
+	\item \textbf{\textit{Train\_gate}:} comportamento assintótico similar a \textit{elevator2}. Sem muitas novidades para apresentar.
+\end{itemize}
+
+Os gráficos de monitoramento e as tabelas de dados brutos remanescentes dessas instâncias encontram-se mapeados complementarmente no .
 	
 
 
-	\section{Verificação Simbólica com Reordenamento de Variáveis Estático}
+	\chapter{Verificação Simbólica com Reordenamento de Variáveis Estático}
 	Segundo \citeonline{baierPrinciplesModelChecking2008a}, a ordem das variáveis pode afetar drasticamente o tamanho do BDD. 
 	Para analisar esse problema, o PLACEHOLDER foi expandido para comportar o reordenamento de variáveis estático. 
 	Não foi possível implementar o reordenamento dinâmico, uma vez que a biblioteca OxiDD não possui suporte para essa funcionalidade.
@@ -555,10 +893,85 @@ O grande movimento dos pesquisadores, então, consiste em encontrar formas de re
 	\end{itemize}
 	
 
-	\subsection{Notas de implementação}
-	\subsection{Resultados e Avaliação}
+	
+	\section{Resultados e Avaliação}
+	
+	\subsection{Jantar dos filósofos (\textit{dining})}
+	\label{sec:dining_heurísticas}
+	
+	Para avaliar a sensibilidade do verificador \texttt{llull-BDD} e do NuSMV diante da disposição geométrica das variáveis na árvore de decisão, estendeu-se o experimento para as heurísticas de reordenamento dinâmico (\textit{Dynamic}), ordenamento baseado em forças (\textit{FORCE}) e atribuição aleatória (\textit{Random}). 
+	
+	\begin{figure}[htbp]
+		\centering
+		% Subfigura 1: llull-BDD (Foco em Verificação)
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_comp_heuristica_llull_bdd_dining_verify_ms.pdf}
+			\caption{Heurísticas no \texttt{llull-BDD}.}
+			\label{fig:dining_comp_heurísticas_llull_bdd}
+		\end{minipage}
+		\hfill
+		% Subfigura 2: NuSMV-static
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_comp_heuristica_nusmv_static_dining_verify_ms.pdf}
+			\caption{Heurísticas no NuSMV.}
+			\label{fig:dining_comp_heurísticas_nusmv}
+		\end{minipage}
+		\caption{Comparativo do impacto de diferentes heurísticas de ordenamento no tempo de verificação pura ($Verify\_MS$) entre os motores simbólicos.}
+		\label{fig:dining_macro_heurísticas}
+	\end{figure}
+	
+	\begin{figure}[htbp]
+		\centering
+		% Subfigura 1: Sobrevivência sob Heurística Dinâmica
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_survival_kaplan_meier_dining_dynamic.pdf}
+			\caption{Sobrevivência sob Heurística Dinâmica.}
+			\label{fig:dining_survival_dynamic}
+		\end{minipage}
+		\hfill
+		% Subfigura 2: Sobrevivência sob Heurística Aleatória (Random)
+		\begin{minipage}{0.48\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/resultados_dining/grafico_survival_kaplan_meier_dining_random.pdf}
+			\caption{Sobrevivência sob Ordenamento Aleatório.}
+			\label{fig:dining_survival_random}
+		\end{minipage}
+		\caption{Estimadores de sobrevivência de Kaplan-Meier comparando a resiliência operacional das ferramentas sob diferentes cenários de estresse geométrico.}
+		\label{fig:dining_survival_combinado}
+	\end{figure}
+	
+	\begin{table}[htbp]
+		\centering
+		\caption{Consolidação dos vencedores locais (Teste U de Mann-Whitney) para Tempo Total e Nós BDD sob diferentes heurísticas entre \texttt{llull-BDD} e NuSMV-static.}
+		\label{tab:estatistica_dining_heurísticas}
+		\small
+		\begin{tabular}{rccccccc}
+			\toprule
+			& \multicolumn{2}{c}{\textbf{Heurística: DYNAMIC}} & & \multicolumn{2}{c}{\textbf{Heurística: FORCE}} & & \multicolumn{1}{c}{\textbf{Heurística: RANDOM}} \\
+			\cmidrule{2-3} \cmidrule{5-6} \cmidrule{8-8}
+			\textbf{N} & \textbf{Tempo Total} & \textbf{Nós BDD} & & \textbf{Tempo Total} & \textbf{Nós BDD} & & \textbf{Tempo Total} \\
+			\midrule
+			2  & NuSMV       & \textbf{llull} & & Empate      & \textbf{llull} & & NuSMV \\
+			4  & \textbf{llull} & \textbf{llull} & & Empate      & \textbf{llull} & & Empate \\
+			6  & \textbf{llull} & \textbf{llull} & & \textbf{llull} & \textbf{llull} & & \textbf{llull} \\
+			8  & NuSMV       & \textbf{llull} & & \textbf{llull} & \textbf{llull} & & \textbf{llull} \\
+			10 & NuSMV       & NuSMV       & & NuSMV       & NuSMV       & & \textbf{llull} \\
+			12 & NuSMV       & NuSMV       & & NuSMV       & NuSMV       & & Empate \\
+			14 & NuSMV       & NuSMV       & & NuSMV       & NuSMV       & & Empate \\
+			\midrule
+			\textbf{KS} & Divergente & Divergente & & Divergente & Divergente & & Divergente \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\FloatBarrier
 	
 	
+	
+	\FloatBarrier
 
 	
 
