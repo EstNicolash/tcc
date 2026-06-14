@@ -374,13 +374,13 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 
 
 	
-	\chapter{Diagramas de decisão binário (Binary Decision Diagrams)}
+	\chapter{Diagramas de Decisão Binária (BDDs)}
 	
 	Neste capítulo, será apresentada a principal estrutura de dados usada para a representação simbólica da lógica CTL. 
 	Em linhas gerais, utiliza-se um \textit{Binary Decision Diagram} (BDD) para representar de forma compacta uma \textit{switching function}, a qual expressa um conjunto de estados que satisfazem uma fórmula. 
 	Toda a apresentação deste modelo serve como base teórica para a compreensão dos resultados. O conteúdo deste capítulo segue o que foi apresentado em \citeonline{baierPrinciplesModelChecking2008a}.
 	
-	\section{Switching Functions}
+	\section{Funções de Chaveamento (\textit{Switching Functions})}
 	
 	Seja um conjunto de variáveis boolianas $Var = \{x_1,x_2,x_3,...,x_n\}$. 
 	Uma \textbf{avaliação} é uma atribuição de valores boolianos ($0$ ou $1$) a essas variáveis; ou seja, uma avaliação é uma função $\eta: Var \to \{0,1\}$. 
@@ -394,11 +394,11 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 		\chi_T(s) = 1 \iff s \in T
 	\end{equation}
 	
-	Dessa forma, operações sobre conjuntos (união, interseção, complemento, etc.) são realizadas por meio de operações lógicas ($\lor$, $\land$, $\neg$, etc.) sobre as \textit{switching functions}. 
+	Com isto, é possível representar cada estado por meio de um vetor de variáveis boolianas, de modo que um subconjunto de estado pode ser mapeado para uma função característica, substituindo buscas em grafos por operações lógicas.
 	
 	
 	
-	\section{Diagramas de decisão binário (Binary Decision Diagrams)}
+	\section{Diagramas de Decisão Binária (BDDs)}
 	
 	Um BDD é uma estrutura de dados usada para representar uma \textit{switching function}. Seja o conjunto de variáveis $Var =\{x_1,x_2,...,x_n\}$. Um \textit{Binary Decision Diagram} é uma tupla $(V,V_I,V_T,succ_0,succ_1,var,val,v_0)$ \cite{baierPrinciplesModelChecking2008a}. Cada elemento da tupla é definido como:
 	\begin{itemize}
@@ -416,7 +416,7 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	Segundo \citeonline{baierPrinciplesModelChecking2008a}, em aplicações de verificação de modelos, trabalha-se com diagramas mais comportados, sendo as principais propriedades deles definidas da seguinte forma:
 	
 	\begin{itemize}
-		\item \textbf{Ordered Binary Decision Diagram (OBDD)}: Um $\mathcal{P}$-OBDD é um BDD $\mathcal{B}$ que respeita um ordenamento de variáveis $(x_1,x_2,...,x_n)$, no qual $x_i<x_{i+1}$ para qualquer valor de $i\in{\{1,...,n\}}$. A função de sucessores deve ser consistente com a relação de ordem; ou seja, se $succ(v_i) = v_j$, então $var(v_i)<var(v_j)$.
+		\item \textbf{Ordered Binary Decision Diagram (OBDD)}: Um $\mathcal{P}$-OBDD é um BDD $\mathcal{B}$ que respeita um ordenamento de variáveis $(x_1,x_2,...,x_n)$, no qual $x_i<x_{i+1}$ para qualquer valor de $i\in{\{1,...,n\}}$. A função de sucessores deve ser consistente com a relação de ordem; ou seja, se $succ(v_i) = v_j$, então $var(v_i)<var(v_j)$. A escolha da ordem das variáveis impacta diretamente o tamanho do diagrama binário resultante, existindo casos em que uma ordenação desfavorável acarreta um crescimento exponencial do número de nós em relação ao número de variáveis.
 		\item \textbf{Reduced Ordered Binary Decision Diagram (ROBDD)}: Um ROBDD é um $\mathcal{P}$-OBDD no qual $\forall v,w\in V(v\neq w\to f_v \neq f_w)$, em que $f_v$ é a função induzida de um BDD tomando o nó $v$ como raiz. Um ROBDD é uma representação canônica e única de qualquer função booliana numa ordem de variáveis. Isso possui duas vantagens: a primeira é que todo OBDD pode ser reduzido por meio de regras de redução, economizando memória; a segunda é a possibilidade verificar a equivalência da função em tempo constante, simplesmente verificando se as funções compartilham o mesmo nó raiz.
 		\item \textbf{Shared Ordered Binary Decision Diagram (SOBDD)}: Cada função possui um ROBDD para ser representada; porém, manter diversos ROBDDs pode ser custoso, pois há redundâncias e duplicação de funções. Para evitar isso, utiliza-se o SOBDD, um OBDD com diversas raízes (um conjunto de raízes em vez de um único $v_0$). Cada função é representada por uma raiz, e as diferentes funções compartilham nós de funções isomórficas. Bibliotecas de BDD implementam esse tipo para reduzir o uso de memória.
 	\end{itemize}  
@@ -425,7 +425,9 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	\subsection{Exemplo: Shared OBDD (SOBDD)}
 	Neste exemplo, as funções $f = x \land y$ e $g = z \lor (x \land y)$ são representadas simultaneamente. A subexpressão $(x \land y)$ é calculada e armazenada apenas uma vez, sendo compartilhada por ambas as raízes.
 	
-	\begin{center}
+	
+	\begin{figure}
+		\centering
 		\begin{tikzpicture}[
 			node distance=1.5cm and 2cm,
 			v/.style={circle, draw, minimum size=8mm, thick},
@@ -461,28 +463,32 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 			\draw[->, dashed] (y) -- (t0);
 			
 		\end{tikzpicture}
-	\end{center}
+		\caption{Exemplo de SOBDD representando simultaneamente as funções $f = x \land y$ e $g = z \lor (x \land y)$.}
+		\label{fig:sobdd_exemplo}
+		\legend{Fonte: elaborado pelo autor (2026).}
+	\end{figure}
 	
 	
-	
-	
-	\chapter{Codificação de Modelos SSMV para \textit{switching functions}}
+	\chapter{Codificação de Modelos SSMV para Funções de Chaveamento}
 	\label{ch:code}
 	
 	Em \citeonline{baierPrinciplesModelChecking2008a}, apresenta-se como codificar estruturas de Kripke (sistemas de transição, na terminologia dos autores) em \textit{switching functions}. 
 	Como se utiliza um modelo baseado em SMV, é necessário realizar um tratamento específico para cada tipo de dado e expressão da linguagem de descrição, tais como atribuições, condicionais, enumerações, etc.
 	Nos materiais consultados, não foi encontrada a formalização dessa codificação.
-	Assim, este trabalho propõe o desenvolvimento de uma codificação própria para a linguagem de descrição, a qual é detalhada no presente capítulo.  
+	Assim, a codificação descrita no presente capítulo foi desenvolvida pelo autor do trabalho. 
+	A \autoref{sec:cod_var} apresenta a codificação de variáveis, a \autoref{sec:cod_bool} apresenta a codificação de expressões boolianas, a \autoref{sec:cod_rel} apresenta a codificação de expressões relacionais, a \autoref{sec:cod_arit} apresenta a codificação de operações aritméticas, detalhando os procedimentos de adição (\autoref{sec:cod_adder}) e subtração (\autoref{sec:cod_sub}). Por fim, a \autoref{sec:cod_atrib} aborda as relações de atribuição para enumerações (\autoref{sec:cod_atrib_enum}) e condicionais (\autoref{sec:cod_atrib_cond}), culminando na composição da relação de transição global detalhada na \autoref{sec:cod_transic}.
 	
 	
-	\section{Codificação de Variáveis}
+	\section{Codificação de variáveis}
+	\label{sec:cod_var}
 	Variáveis de domínios finitos são mapeadas para vetores de bits boolianos de acordo com o tamanho do domínio do tipo de dado. 
-	Seja $|dom(x)|$ a cardinalidade do domínio de uma variável do SSMV (sejam naturais, booleanas ou enumerações). 
-	A quantidade de variáveis boolianas do BDD necessárias para representar cada variável do SSMV é dada por $\lceil \log_2(|dom(x)|)\rceil$. Para cada variável booliana criada, é obrigatório gerar um número idêntico de variáveis boolianas futuras, as quais são usadas para representar as expressões \textit{next} (ou seja, como o valor de uma variável é atualizado).
+	Seja $|dom(x)|$ a cardinalidade do domínio de uma variável do SSMV (natural, booliana ou enumeração). 
+	A quantidade de variáveis boolianas do BDD necessárias para representar cada variável do SSMV é dada por $\lceil \log_2(|dom(x)|)\rceil$. Para cada variável booliana criada, é obrigatório gerar um número idêntico de variáveis boolianas futuras, as quais são usadas para representar as expressões \texttt{next} (ou seja, como o valor de uma variável é atualizado).
 	
 	Por exemplo, caso $n: 0..7$ seja uma variável do tipo natural, teremos $|dom(n)| = 8$, logo $\lceil \log_2(8)\rceil = 3$. Ou seja, serão necessárias três variáveis lógicas (por exemplo, $x_1$, $x_2$ e $x_3$) para codificar a variável $n$ do SSMV. Adicionalmente, serão requeridas as variáveis de estado futuro correspondentes: $x_1'$, $x_2'$ e $x_3'$.
 	
 	\section{Codificação de expressões boolianas}
+	\label{sec:cod_bool}
 	A partir desta seção, será usado $f_\phi$ para simbolizar a \textit{switching function} que representa a expressão $\phi$ da linguagem de descrição SSMV, sendo $\phi$ uma expressão arbitrária.
 	Primeiramente, para cada expressão booliana, basta codificar as subexpressões para sua respectiva \textit{switching function} e realizar a operação booliana:
 	\begin{itemize}
@@ -492,59 +498,72 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 		\item \textbf{a->b}: $f_{\text{a->b}} = f_a\to f_b$.
 	\end{itemize}
 	
-
+	\section{Codificação de expressões relacionais}
+	\label{sec:cod_rel}
+	Sejam $\textbf{a}$ e $\textbf{b}$ dois vetores de bits boolianos de largura $n$ (normalizados via extensão de zeros caso possuam tamanhos originais distintos), em que  $x_i$ representa os bits que codificam $\textbf{a}$ e $y_i$ os bits que codificam $\textbf{b}$, indexados do bit menos significativo ($i=1$) ao mais significativo ($i=n$).
+	\begin{align}
+		&\text{\texttt{\textbf{a = b}}:} \quad f_{\texttt{a=b}} = \bigwedge_{i=1}^n (x_i \leftrightarrow y_i) &\\
+		&\text{\texttt{\textbf{a != b}}:} \quad f_{\texttt{a!=b}} = \neg f_{\texttt{a=b}} &\\
+		&\text{\texttt{\textbf{a > b}}:} \quad f_{\texttt{a>b}} = \bigvee_{i=1}^n \left( (x_i \land \neg y_i) \land \bigwedge_{j=i+1}^n (x_j \leftrightarrow y_j) \right) &\\
+		&\text{\texttt{\textbf{a <= b}}:} \quad f_{\texttt{a<=b}} = \neg f_{\texttt{a>b}} &\\
+		&\text{\texttt{\textbf{a < b}}:} \quad f_{\texttt{a<b}} = f_{\texttt{b>a}} &\\
+		&\text{\texttt{\textbf{a >= b}}:} \quad f_{\texttt{a>=b}} = \neg f_{\texttt{a<b}} &
+	\end{align}
+	A codificação do operador relacional "maior que" ($>$) executa a varredura a partir do bit mais significativo ($i=n$) em direção ao menos significativo, servindo o bit i como critério de desempate caso os bits superiores sejam equivalentes
 	
-	\section{Codificação de Expressões Relacionais}
-	Sejam $\textbf{a}$ e $\textbf{b}$ dois vetores de bits boolianos de largura $n$ (normalizados via extensão de zeros caso possuam tamanhos originais distintos), onde $x_i$ representa os bits que codificam $\textbf{a}$ e $y_i$ os bits que codificam $\textbf{b}$, indexados do bit menos significativo ($i=1$) ao mais significativo ($i=n$).
-	\begin{itemize}
-		\item \textbf{a = b}: $f_{\text{a=b}} = \bigwedge_{i=1}^n (x_i \leftrightarrow y_i)$
-		\item \textbf{a != b}: $f_{\text{a!=b}} = \neg f_{\text{a=b}}$
-		\item \textbf{a > b}: $f_{\text{a>b}} = \bigvee_{i=1}^n \left( (x_i \land \neg y_i) \land \bigwedge_{j=i+1}^n (x_j \leftrightarrow y_j) \right)$
-		\item \textbf{a <= b}: $f_{\text{a<=b}} = \neg f_{\text{a>b}}$
-		\item \textbf{a < b}: $f_{\text{a<b}} = f_{\text{b>a}}$
-		\item \textbf{a >= b}: $f_{\text{a>=b}} = \neg f_{\text{a<b}}$
-	\end{itemize}
+	\section{Codificação de operações aritméticas}
+	\label{sec:cod_arit}
+	As codificação adição e subtração baseiam-se nos conceitos clássicos de circuitos lógicos combinatórios (como o \textit{Ripple Carry Adder}), estendidos aqui para o mapeamento direto em funções de chaveamento.
+	 
 	
-	
-	\section{Codificação de Operações Aritméticas}
-	A aritmética de vetores de bits é implementada simulando circuitos combinatórios através de operações lógicas. 
-	
-	\subsection*{Adição (Ripple Carry Adder)}
+	\vspace{1em}
+	\noindent \textbf{Adição:}
+	\label{sec:cod_adder}
 	A soma de dois vetores de bits $\textbf{a}$ e $\textbf{b}$ de tamanho $n$ é realizada bit a bit, propagando um bit de transporte (\textit{carry}). O bit de transporte inicial é definido como $c_0 = 0$. Para cada bit $i \in \{1, \dots, n\}$, o bit de soma $s_i$ e o próximo \textit{carry} $c_{i}$ são calculados como:
-	\begin{itemize}
-		\item $s_i = x_i \oplus y_i \oplus c_{i-1}$
-		\item $c_i = (x_i \land y_i) \lor ((x_i \oplus y_i) \land c_{i-1})$
-	\end{itemize}
+	\begin{align}
+		&s_i = x_i \oplus y_i \oplus c_{i-1} &\\
+		&c_i = (x_i \land y_i) \lor ((x_i \oplus y_i) \land c_{i-1}) &
+	\end{align}
 	
-	\subsection*{Subtração (Complemento de Dois)}
-	A subtração $\textbf{a} - \textbf{b}$ é convertida em uma operação de soma utilizando a representação de complemento de dois. Matematicamente, a operação é equivalente a $\textbf{a} + \neg \textbf{b} + 1$. 
-	\begin{itemize}
-		\item O \textit{carry} inicial é definido como $c_0 = 1$, representando o $+1$ da fórmula.
-		\item $sub_i = x_i \oplus \neg y_i \oplus c_{i-1}$.
-	\end{itemize}
+	\vspace{1em}
+	\noindent \textbf{Subtração:}
+	\label{sec:cod_sub}
+	A subtração $\textbf{a} - \textbf{b}$ é convertida em uma operação de soma utilizando a representation de complemento de dois. Matematicamente, a operação é equivalente a $\textbf{a} + \neg \textbf{b} + 1$. O \textit{carry} inicial é definido como $c_0 = 1$, representando o $+1$ da fórmula.
+	\begin{equation}
+		sub_i = x_i \oplus \neg y_i \oplus c_{i-1}
+	\end{equation}
 	
-	  \section{Relações de Atribuição}
-	\subsection*{Enumerações e Conjuntos}
-	Seja um conjunto de elementos determinísticos $\{e_1, e_2, \dots, e_k\}$, a função que atribui uma constante não-determinística a uma variável de estado futuro $x'$ é expressa pela disjunção das relações individuais de equivalência:
+	\section{Relações de atribuição}
+	\label{sec:cod_atrib}
+	
+	\vspace{1em}
+	\noindent \textbf{Enumerações e conjuntos:}
+	\label{sec:cod_atrib_enum}
+	Seja um conjunto de constantes $\{e_1, e_2, \dots, e_k\}$, a função que atribui uma constante não-determinística a uma variável de estado futuro $x'$ é expressa pela disjunção das relações individuais de equivalência:
 	\begin{equation}
 		f_{enum} = \bigvee_{i=1}^k (x' \leftrightarrow e_i)
+		\label{eq:atrib_enum}
 	\end{equation}
 	
-	\subsection*{Condicionais (\textit{Case})}
-	As expressões condicionais avaliam uma sequência de cláusulas de guarda $\{c_1, c_2, \dots, c_n\}$ associadas a seus respectivos blocos de atribuição final $\{r_1, r_2, \dots, r_n\}$. No modelo SSMV, essas estruturas mapeiam o comportamento lógico do operador \textit{next}, assumindo a forma \textit{next(x) := case c\_1 : r\_1; \dots; esac;}.
+	\vspace{1em}
+	\noindent \textbf{Condicionais:}
+	\label{sec:cod_atrib_cond}
+	As expressões condicionais avaliam uma sequência de cláusulas de guarda $\{c_1, c_2, \dots, c_n\}$ associadas a seus respectivos blocos de atribuição final $\{r_1, r_2, \dots, r_n\}$. No modelo SSMV, essas estruturas mapeiam o comportamento lógico do operador \texttt{next}, assumindo a forma \texttt{next(x) := case c\_1 : r\_1; \dots; esac;}.
 	
-	A compilação é realizada por meio do encadeamento ordenado de operadores \textit{if-then-else} ($ITE$), processados recursivamente a partir da última cláusula:
+	A compilação é realizada por meio do encadeamento ordenado de operadores \textit{if-then-else} ($ITE$) apresentados em \citeonline{baierPrinciplesModelChecking2008a}, processados recursivamente a partir da última cláusula:
 	\begin{equation}
 		f_{case} = ITE(c_1, f_{x'=r_1}, ITE(c_2, f_{x'=r_2}, \dots ITE(c_n, f_{x'=r_n}, \text{false}) \dots ))
+		\label{eq:cond}
 	\end{equation}
 	
-	\section{Relação de Transição Transicional (\texorpdfstring{$\Delta$}{Delta})}
-	A relação de transição global do sistema é codificada como uma fórmula booliana monolítica que restringe o comportamento conjunto de todas as variáveis do presente ($s$) e suas respectivas projeções no estado futuro ($s'$):
+	\section{Relação de transição}
+	\label{sec:cod_transic}
+	A relação de transição global do sistema é codificada como uma fórmula booliana monolítica que restringe o comportamento conjunto de todas as variáveis do presente ($s$) e suas respectivas projeções no estado futuro ($s$'):
 	\begin{equation}
 		\Delta(s, s') = \bigwedge_{v \in Var} \mathcal{R}_v(s, s')
 	\end{equation}
 	
-	Onde $\mathcal{R}_v(s,s')$ representa a relação de atribuição construída para a variável $v$ com base no bloco gramatical do modelo SSMV, integrando as seguintes regras de mapeamento:
+	Em que $\mathcal{R}_v(s,s')$ representa a relação de atribuição construída para a variável $v$ com base no bloco gramatical do modelo SSMV, integrando as seguintes regras de mapeamento:
 	\begin{itemize}
 		\item \textbf{Atribuição Simples:} $\mathcal{R}_v = (x' \leftrightarrow f_x(s))$
 		\item \textbf{Conjuntos/enumerações:} $\mathcal{R}_v = \bigvee_{i=1}^k(x' \leftrightarrow e_i)$
@@ -554,13 +573,15 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	
 	
 	
+	
+	
 	\chapter{Verificação de Modelos Simbólica}
 	\label{ch:ver_simbolica}
 	
-	Neste capítulo, serão apresentadas algumas informações sobre o algoritmo implementado, além de uma comparação entre o lull e o NuSMV. 
+	Neste capítulo, serão apresentadas algumas informações sobre o algoritmo implementado, além de uma comparação entre o \texttt{llull} e o NuSMV. 
 	Na subseção final, essa mesma análise será realizada, mas com a adição de heurísticas de reordenamento de variáveis e a avaliação de seu impacto na verificação.
 	
-	\section{Algoritmo e Notas de Implementação}
+	\section{Algoritmo e notas de implementação}
 	A representação de \textit{switching functions} por BDDs foi realizada utilizando-se a biblioteca 
 	\textbf{OxiDD}, apresentada em \citeonline{husungOxiDDSafeConcurrent2024}.
 	A codificação foi desenvolvida seguindo as definições do Capítulo~\ref{ch:code}. 
@@ -573,15 +594,15 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 		\item No processo de compilação, o modelo em SSMV é transformado numa AST, que então é transformado numa representação intermediária mais simples para a etapa de codificação para BDD.
 	\end{itemize}
 	
-	\section{Resultados e Avaliação}
+	\section{Resultados e avaliação}
 	\label{sec:resultados_avaliacao}
 	
-	A definição de quais dados foram coletados, a forma como as comparações foram feitas, os testes estatísticos utilizados e a maneira como as informações são dispostas foram estabelecidos na seção de metodologia (\ref{sec:metodologia_t}). Assim, o presente tópico delimita-se à apresentação dos resultados e à respectiva avaliação deles. Será apresentada uma subseção por instância caso os resultados da variação escalar sejam relevantes. A razão para não dedicar a cada modelo uma subseção isolada será detalhada na Seção~\ref{sec:outras_inst}.
+	A definição de quais dados foram coletados, a forma como as comparações foram feitas, os testes estatísticos utilizados e a maneira como as informações são dispostas foram estabelecidos na seção de metodologia (\ref{sec:metodologia_t}). Assim, o presente tópico delimita-se à apresentação dos resultados e à respectiva avaliação deles. Será apresentada uma subseção por instância caso os resultados da variação escalar sejam relevantes. A razão para não dedicar a cada modelo uma subseção isolada será detalhada na Seção~\ref{sec:sintese_experimentos}.
 	
 	% =========================================================================
 	% 1. DINING
 	% =========================================================================
-	\subsection{Problema dos Filósofos (\textit{Dining})}
+	\subsection{Problema dos filósofos (\textit{Dining})}
 	\label{sec:res_dining}
 	
 	O problema clássico do jantar dos filósofos foi avaliado sob a configuração de ordenamento padrão (\textit{default}). O parâmetro de escala $N$ representa o número de filósofos concorrentes sentados à mesa, expandindo-se de $N=2$ até $N=16$.
@@ -668,7 +689,7 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	% =========================================================================
 	% 2. COUNTER
 	% =========================================================================
-\subsection{Contador Binário (\textit{Counter})}
+\subsection{Contador binário (\textit{Counter})}
 \label{sec:res_counter}
 
 A instância \textit{Counter} avalia o comportamento dos verificadores diante de um modelo altamente regular de um contador binário síncrono parametrizado por um espaço de estados de $N$ bits. O experimento expande o parâmetro de escala de $N=2$ até $N=22$ sob a configuração de ordenamento padrão (\textit{default}).
@@ -748,7 +769,7 @@ A instância \textit{Counter} avalia o comportamento dos verificadores diante de
 	% =========================================================================
 	% 5. ELEVATOR2
 	% =========================================================================
-	\subsection{Controle de Elevador (\textit{Elevator2})}
+	\subsection{Controle de elevador (\textit{Elevator2})}
 	\label{sec:res_elevator2}
 	
 	A instância \textit{Elevator2} simula a lógica de despacho, requisição e movimentação física de uma cabine de elevador operando com um número parametrizado de $N$ andares.
@@ -889,7 +910,7 @@ A instância \textit{Counter} avalia o comportamento dos verificadores diante de
 O problema \textit{sokoban} só consegue ser resolvido pelos algoritmos simbólicos.
 Porém, é um caso em que NuSMV supera muito a implementação deste trabalho.
 
-\subsection{Síntese dos Demais Cenários Experimentais}
+\subsection{Síntese dos demais cenários experimentais}
 \label{sec:sintese_experimentos}
 
 Os dados detalhados referentes aos cenários experimentais restantes da suíte de benchmarks não serão apresentados no corpo principal deste capítulo pelas seguintes razões:
@@ -901,10 +922,7 @@ Os dados detalhados referentes aos cenários experimentais restantes da suíte d
 	\item \textbf{\textit{Train\_gate}:} comportamento assintótico similar a \textit{elevator2}. Sem muitas novidades para apresentar.
 \end{itemize}
 
-Os gráficos de monitoramento e as tabelas de dados brutos remanescentes dessas instâncias encontram-se mapeados complementarmente no .
 	
-
-
 	\chapter{Verificação Simbólica com Reordenamento de Variáveis}
 	Segundo \citeonline{baierPrinciplesModelChecking2008a}, a ordem das variáveis pode afetar drasticamente o tamanho do BDD. 
 	Para analisar esse problema, o llull foi expandido para comportar o reordenamento de variáveis estático. 
