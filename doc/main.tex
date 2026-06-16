@@ -9,6 +9,7 @@
 \usepackage{multirow}
 \usepackage{array}     
 \usepackage{listings}
+\usepackage{subfig}
 \usepackage{xcolor}
 \usepackage{float}
 \usepackage{placeins}
@@ -263,7 +264,7 @@ Por fim, ativou-se a opção \texttt{-mono} para forçar o uso de relações de 
 		\item $R \subseteq S \times S$ é uma \textbf{relação de acessibilidade}.
 	\end{itemize}
 	\par
-	A expressão $(s,s')\in R$ como: $s'$ é acessível a partir do mundo $s$. Um \textit{frame} pode ser facilmente visualizado como um dígrafo. Um \textbf{modelo} $M$ é uma tupla $(F, AP, L)$ em que:
+	A expressão $(s,s')\in R$ é lida como: $s'$ é acessível a partir do mundo $s$. Um \textit{frame} pode ser facilmente visualizado como um dígrafo. Um \textbf{modelo} $M$ é uma tupla $(F, AP, L)$ em que:
 		\begin{itemize}
 		\item $F$ é um \textit{frame}.
 		\item $AP$ é um conjunto finito de \textbf{proposições atômicas}.
@@ -298,7 +299,7 @@ Por fim, ativou-se a opção \texttt{-mono} para forçar o uso de relações de 
 		\Phi ::= \top \mid a \mid \neg \Phi \mid \Phi_1 \land \Phi_2 \mid EX \Phi \mid E[\Phi_1 U \Phi_2] \mid EG \Phi
 	\end{equation}
 	
-	Onde $a \in AP$ representa uma proposição atômica. A partir deste conjunto, definimos os demais operadores como abreviações lógicas:
+	Em que $a \in AP$ representa uma proposição atômica. A partir deste conjunto, definimos os demais operadores como abreviações lógicas:
 	\begin{equation}
 		\begin{aligned}
 			AX \Phi &\equiv \neg EX \neg \Phi \\
@@ -501,7 +502,7 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	Como se utiliza um modelo baseado em SMV, é necessário realizar um tratamento específico para cada tipo de dado e expressão da linguagem de descrição, tais como atribuições, condicionais, enumerações, etc.
 	Nos materiais consultados, não foi encontrada a formalização dessa codificação.
 	Assim, a codificação descrita no presente capítulo foi desenvolvida pelo autor do trabalho. 
-	A \autoref{sec:cod_var} apresenta a codificação de variáveis, a \autoref{sec:cod_bool} apresenta a codificação de expressões boolianas, a \autoref{sec:cod_rel} apresenta a codificação de expressões relacionais, a \autoref{sec:cod_arit} apresenta a codificação de operações aritméticas, detalhando os procedimentos de adição (\autoref{sec:cod_adder}) e subtração (\autoref{sec:cod_sub}). Por fim, a \autoref{sec:cod_atrib} aborda as relações de atribuição para enumerações (\autoref{sec:cod_atrib_enum}) e condicionais (\autoref{sec:cod_atrib_cond}), culminando na composição da relação de transição global detalhada na \autoref{sec:cod_transic}.
+	A \autoref{sec:cod_var} apresenta a codificação de variáveis, a \autoref{sec:cod_bool} apresenta a codificação de expressões boolianas, a \autoref{sec:cod_rel} apresenta a codificação de expressões relacionais, a \autoref{sec:cod_arit} apresenta a codificação de operações aritméticas, detalhando os procedimentos de adição e subtração. Por fim, a \autoref{sec:cod_atrib} aborda as relações de atribuição para enumerações e condicionais, culminando na composição da relação de transição global detalhada na \autoref{sec:cod_transic}.
 	
 	
 	\section{Codificação de variáveis}
@@ -538,7 +539,7 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	
 	\section{Codificação de operações aritméticas}
 	\label{sec:cod_arit}
-	As codificação adição e subtração baseiam-se nos conceitos clássicos de circuitos lógicos combinatórios (como o \textit{Ripple Carry Adder}), estendidos aqui para o mapeamento direto em funções de chaveamento.
+	As codificações de adição e subtração baseiam-se nos conceitos clássicos de circuitos lógicos combinatórios (como o \textit{Ripple Carry Adder}), estendidos aqui para o mapeamento direto em funções de chaveamento.
 	 
 	
 	\vspace{1em}
@@ -1351,7 +1352,7 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	
 	
 	Verificando as curvas de sobrevivência (Figura~\ref{fig:sokoban_survival_monolithic}), é possível observar que as heurísticas expandiram marginalmente a resiliência dos verificadores. Contudo, nenhum dos ordenamentos foi capaz de otimizar o suficiente para estender a verificação para além de $N=4$. Nesse cenário de maior complexidade, o NuSMV consolidou novamente sua superioridade  frente ao \texttt{llull-BDD}.
-	Vale salientar que, sob a configuration padrão (\textit{default}), o NuSMV obteve sucesso na conclusão da instância $N=4$, divergindo do comportamento observado na Seção~\ref{sec:res_sokoban}. Essa variação pontual de desempenho entre os experimentos sugere uma sensibilidade a fatores do ambiente de execução ou a políticas internas de alocação dinâmica de memória do programa.
+	Vale salientar que, sob a configuração padrão (\textit{default}), o NuSMV obteve sucesso na conclusão da instância $N=4$, divergindo do comportamento observado na Seção~\ref{sec:res_sokoban}. Essa variação pontual de desempenho entre os experimentos sugere uma sensibilidade a fatores do ambiente de execução ou a políticas internas de alocação dinâmica de memória do programa.
 	Além disso, percebe-se que o ordenamento padrão conseguiu desempenhar tão bem quanto o próprio \textit{sifting} estático e mais que o ordenamento aleatório e o ordenamento FORCE. 
 	Isso não diz muito sobre a qualidade da heurística FORCE, pois ela pode necessitar de mais iterações para convergir num valor melhor.
 	A hipótese provável para o bom desempenho padrão é que o modelo original em SSMV deste problema introduz uma ordem de declaração de variáveis estritamente próxima da ótima.
@@ -1445,26 +1446,14 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	% =========================================================================
 	\begin{figure}[htbp]
 		\centering
-		\begin{minipage}{0.32\textwidth}
-			\centering
-			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban2/grafico_survival_kaplan_meier_sokoban_default.pdf}
-			\caption{Sobrevivência em \textit{default}.}
-			\label{fig:sokoban_surv_default}
-		\end{minipage}
+		\subfloat[Sobrevivência em \textit{default}.\label{fig:sokoban_surv_default}]{%
+			\includegraphics[width=0.32\textwidth]{figures/fig/resultados_sokoban2/grafico_survival_kaplan_meier_sokoban_default.pdf}}
 		\hfill
-		\begin{minipage}{0.32\textwidth}
-			\centering
-			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban2/grafico_survival_kaplan_meier_sokoban_force.pdf}
-			\caption{Sobrevivência em \textit{force}.}
-			\label{fig:sokoban_surv_force}
-		\end{minipage}
+		\subfloat[Sobrevivência em \textit{force}.\label{fig:sokoban_surv_force}]{%
+			\includegraphics[width=0.32\textwidth]{figures/fig/resultados_sokoban2/grafico_survival_kaplan_meier_sokoban_force.pdf}}
 		\hfill
-		\begin{minipage}{0.32\textwidth}
-			\centering
-			\includegraphics[width=\textwidth]{figures/fig/resultados_sokoban2/grafico_survival_kaplan_meier_sokoban_dynamic.pdf}
-			\caption{Sobrevivência em \textit{sifting}.}
-			\label{fig:sokoban_surv_dynamic}
-		\end{minipage}
+		\subfloat[Sobrevivência em \textit{sifting}.\label{fig:sokoban_surv_dynamic}]{%
+			\includegraphics[width=0.32\textwidth]{figures/fig/resultados_sokoban2/grafico_survival_kaplan_meier_sokoban_dynamic.pdf}}
 		\caption{Estimadores de sobrevivência de Kaplan-Meier para as instâncias \textit{sokoban}.}
 		\label{fig:sokoban_survival_monolithic}
 		\legend{Fonte: elaborado pelo autor (2026).}
@@ -1478,7 +1467,7 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	Os dados detalhados referentes aos cenários experimentais restantes da suíte de experimentos não serão apresentados no corpo principal deste capítulo pelas seguintes razões:
 	
 	\begin{itemize}
-		\item \textbf{\textit{Fischer}:} Este caso assemelha-se ao reportado na, mesmo Seção \ref{sec:sintese_experimentos}. Apresenta outra vez um comportamento similar ao problema \textit{Elevator2} e a política de corte determinada na Seção \ref{sec:metodologia_t} impediu que o \texttt{llull-BDD} conseguisse resolver mais instâncias. Ou seja, outro caso em que NuSMV demonstrou superioridade. Como não há novidades para análise, optou-se por não apresentar neste capítulo.
+		\item \textbf{\textit{Fischer}:} Este caso assemelha-se ao reportado na Seção \ref{sec:sintese_experimentos}. Apresenta outra vez um comportamento similar ao problema \textit{Elevator2} e a política de corte determinada na Seção \ref{sec:metodologia_t} impediu que o \texttt{llull-BDD} conseguisse resolver mais instâncias. Ou seja, outro caso em que NuSMV demonstrou superioridade. Como não há novidades para análise, optou-se por não apresentar neste capítulo.
 		\item \textbf{\textit{MCS}:} mesmo cenário limitante observado na instância \textit{Fischer}. Para evitar redundância na análise, não foi posto os resultados neste capítulo.
 		\item \textbf{\textit{Synapse}:} apenas o verificador NuSMV conseguiu terminar pelo menos uma instância dadas as restrições com todas as heurísticas. Com elas, foi possível alcançar até $N=6$ para \textit{sifting} e $N=4$ para FORCE (em comparação, a heurística padrão apenas resolve $N=3$). Já \texttt{llull-bdd} conseguiu resolver com apenas com a heurística FORCE. Como não há dados suficientes para uma boa visualização para realizar os testes estatísticos, optou-se por omitir da analise deste capítulo.
 		\item \textbf{\textit{Train Gate}:} Mais um cenário em que a ordem de declaração padrão (\textit{default}) já se encontra em um limiar ótimo, assim como o caso da instância Sokoban. Como não há resultados de uma qualidade diferente dos já apresentados, optou-se por não apresentar neste os gráficos e as tabelas.
@@ -1487,13 +1476,15 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	\section{Discussão geral dos resultados}
 	\label{sec:disc_geral}
 	No geral, os dois motores reagiram de forma semelhante às mesmas heurísticas ao menos no ranqueamento de qual é melhor e qual é pior em cada instância específica.
-	O verificador implementado neste projeto, \texttt{llull-BDD}, apresentou uma performance competitiva em todas as métricas coletadas em cenários simples, como \textit{dining} e \textit{counter} (ver a tabela \ref{tab:consolidacao_mestra_sifting}).
+	O verificador simbólico implementado neste projeto, \texttt{llull-BDD}, apresentou uma performance competitiva em todas as métricas coletadas em cenários simples, como \textit{dining} e \textit{counter} (ver a tabela \ref{tab:consolidacao_mestra_sifting}).
 	Entretanto, em problemas de maior complexidade, como \textit{fischer}, \textit{mcs}, \textit{synapse} e \textit{sokoban}, existe uma grande degradação de desempenho.
 	Este resultado é esperado, pois pode-se atribuir à toda a maturidade do NuSMV, o qual vem sendo desenvolvido ao longo de décadas. 
 	É possível observar, por exemplo, que mesmo nas instâncias mais simples como \textit{dining} e \textit{elevator2}, que NuSMV possui um crescimento menos agressivo de consumo de memória e número de nós (ver as figuras \ref{fig:dining_heuristics_matrix} e \ref{fig:elevator2_heuristics_matrix}).
 	A razão para isto pode ser encontrada na sua etapa de codificação do modelo SMV para BDD.
-	Um caso, por exemplo, é o uso de \textit{Algebraic Decision Diagrams} (ADDs ou MTBDDs), que reduzem o número de nós para representar números, melhorando a eficiência de operações matemáticas. Como visto no Capítulo~\ref{ch:code}, a representação de número é diretamente em BDDs, i.e., como um vetor de bits.
-	Por fim, as heurísticas que melhor desempenharam, no geral, foi a \textit{sifting}, seguindo da FORCE, com algumas exceções notáveis, ou seja, a sensibilidade para uma heurística de ordenamento depende a instância.
+	Um caso, por exemplo, é o uso de \textit{Algebraic Decision Diagrams} (ADDs ou MTBDDs), que reduzem o número de nós para representar números, melhorando a eficiência de operações matemáticas, tendo um melhor impacto em modelos com muitas operações aritméticas. 
+	Como visto no Capítulo~\ref{ch:code}, a representação de número é diretamente em BDDs, i.e., como um vetor de bits.
+	Sobre o \textit{overhead} geral do tempo de compilação do \texttt{llull-BDD}, encontra-se justificado  provavelmente pela representação intermediária entre a AST e o BDD.
+	Por fim, a heurística que melhor desempenhou, no geral, foi a \textit{sifting}, seguido da FORCE, com algumas exceções notáveis, ou seja, a sensibilidade para uma heurística de ordenamento depende a instância.
 	
 	
 	\begin{table}[htbp]
@@ -1551,7 +1542,7 @@ O esforço central dos pesquisadores, então, consiste em encontrar formas de re
 	A fundamentação teórica, estruturada com base nos principais livros-texto da área, culminou no desenvolvimento do \texttt{llull}, com seu motor explícito \texttt{llull-labelling} e seu motor simbólico \texttt{llull-BDD}. 
 	Esse processo de implementação incremental permitiu averiguar empiricamente as dificuldades e os limites teóricos de cada abordagem frente ao problema da explosão do espaço de estados, alcançando o propósito inicial de investigar as metodologias subjacentes ao estado da arte das ferramentas consolidadas. O verificador implementado foi validado utilizando o NuSMV como referência. Para viabilizar esse processo de comparação, a especificação de um subconjunto comum da linguagem descritiva SMV mostrou-se essencial. Por fim, foi realizado um conjunto de experimentos envolvendo problemas parametrizáveis de diferentes naturezas, o qual comparou, principalmente, a eficiência de tempo e memória dos dois motores de verificação. 
 	
-	O verificador implementado neste projeto, \texttt{llull}, conseguiu ser competitivo, e até superior em certos casos, em instâncias e problemas mais simples; porém, o NuSMV apresentou sua robustez em problemas e instâncias mais complexas. Por exemplo, sob a heurística \textit{sifting} na instância \textit{dining} com $N=18$, o \texttt{llull-BDD} apresentou mediana de 25 ms contra 257 ms do NuSMV (uma diferença de aproximadamente 10 vezes); já na instância \textit{train gate} com $N=5$, \texttt{llull-BDD} apresenta a mediana de 6268 ms e contra 357 ms do NuSMV (uma diferença de aproximadamente 18 vezes) (ver Tabela~\ref{tab:consolidacao_mestra_sifting}). Isso mostra a maturidade do NuSMV, mas também atesta que foi possível construir um motor de verificação razoavelmente competitivo em um projeto individual.
+	O motor simbólico implementado neste projeto, \texttt{llull-BDD}, conseguiu ser competitivo, e até superior em certos casos, em instâncias e problemas mais simples; porém, o NuSMV apresentou sua robustez em problemas e instâncias mais complexas. Por exemplo, sob a heurística \textit{sifting} na instância \textit{dining} com $N=18$, o \texttt{llull-BDD} apresentou mediana de 25 ms contra 257 ms do NuSMV (uma diferença de aproximadamente 10 vezes); já na instância \textit{train gate} com $N=5$, \texttt{llull-BDD} apresenta a mediana de 6268 ms e contra 357 ms do NuSMV (uma diferença de aproximadamente 18 vezes) (ver Tabela~\ref{tab:consolidacao_mestra_sifting}). Isso mostra a maturidade do NuSMV, mas também atesta que foi possível construir um motor de verificação razoavelmente competitivo em um projeto individual.
 	
 	Conjuntamente à comparação entre os dois motores, foi possível comparar as heurísticas \textit{sifting}, FORCE, aleatória e padrão (ordem de declaração).
 	A análise do impacto das heurísticas de reordenamento revelou que o \textit{sifting} consistentemente supera as demais configurações, tendo alguns casos excepcionais em que as outras a superam. Além disso, a sensibilidade ao ordenamento varia significativamente entre instâncias.
