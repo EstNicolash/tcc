@@ -2,22 +2,19 @@
 
 Este repositório contém o código-fonte e o texto dissertativo referentes ao Trabalho de Conclusão de Curso (TCC) em Ciência da Computação no Instituto de Informática da Universidade Federal do Rio Grande do Sul (INF/UFRGS).
 
-O projeto consiste no desenvolvimento do **Llull**, um verificador de modelos (*model checker*) composto por um motor explícito (`llull-labelling`) e um motor simbólico (`llull-BDD`) implementado em Rust para a lógica temporal *Computation Tree Logic* (CTL), avaliado comparativamente contra a ferramenta industrial NuSMV.
+O projeto consiste no desenvolvimento do **llull**, um verificador de modelos (*model checker*) composto por um motor explícito (`llull-labelling`) e um motor simbólico (`llull-BDD`) implementado em Rust para a lógica temporal *Computation Tree Logic* (CTL), avaliado comparativamente contra a ferramenta industrial NuSMV.
 
----
 
-## 📁 Estrutura do Repositório
+## Estrutura do Repositório
 
 * `checker/`: Diretório contendo o código-fonte do verificador, suítes de testes e infraestrutura de automação.
     * `src/`: Implementação dos motores explícito e simbólico em Rust.
     * `benchmark/`: Scripts de automação (incluindo o pipeline de visualização e testes estatísticos).
-    * `data/`: Intâncias 
+    * `data/`: Geradores das instâncias
     * `flake.nix` / `flake.lock`: Configurações declarativas do ambiente Nix para garantir reprodutibilidade.
 * `doc/`: Código-fonte em LaTeX (`.tex`), figuras vetoriais e arquivos bibliográficos do texto da monografia.
 
----
-
-## 🚀 Como Executar e Desenvolver (via Nix Flakes)
+##  Como Executar e Desenvolver (via Nix Flakes)
 
 Para garantir que o pipeline experimental compile de maneira idêntica e previsível em qualquer máquina (mitigando problemas de versões globais de ferramentas, bibliotecas C ou compiladores), o projeto utiliza o ecossistema **Nix**.
 
