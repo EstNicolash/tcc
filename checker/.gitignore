@@ -6,6 +6,7 @@
 *.pdf
 .vscode
 *.ipynb
+*.log
 
 /target/
 raw/

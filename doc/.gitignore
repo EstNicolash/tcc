@@ -25,6 +25,12 @@
 *.texstudio
 .auctex-auto/
 _region_.tex
+figures/
+figures2/
+.vscode/
+dicts/
+dif.tex
+main2.tex
 
 .direnv/
 .envrc
